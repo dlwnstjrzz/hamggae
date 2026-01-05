@@ -9,21 +9,17 @@ function normalizeDate(dateStr) {
   if (!dateStr || dateStr === '-' || dateStr.trim() === '') return null;
 
   const patterns = [
-    { regex: /(\d{4})[./\-년](\d{1,2})[./\-월](\d{1,2})/, replace: '$1-$2-$3' },
-    { regex: /(\d{4})[./\-](\d{1,2})[./\-](\d{1,2})/, replace: '$1-$2-$3' },
-    { regex: /(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})/, replace: '$1-$2-$3' },
+    /(\d{4})[./\-년]\s*(\d{1,2})[./\-월]\s*(\d{1,2})/, // 2023.01.01 or 2023년 01월 01일
+    /(\d{4})[./\-](\d{1,2})[./\-](\d{1,2})/,          // 2023-01-01
   ];
 
-  for (const { regex, replace } of patterns) {
-    if (regex.test(dateStr)) {
-      const normalized = dateStr.replace(regex, replace);
-      const parts = normalized.split('-');
-      if (parts.length === 3) {
-        const year = parts[0];
-        const month = parts[1].padStart(2, '0');
-        const day = parts[2].padStart(2, '0');
-        return `${year}-${month}-${day}`;
-      }
+  for (const regex of patterns) {
+    const match = dateStr.match(regex);
+    if (match) {
+      const year = match[1];
+      const month = match[2].padStart(2, '0');
+      const day = match[3].padStart(2, '0');
+      return `${year}-${month}-${day}`;
     }
   }
   return null;
