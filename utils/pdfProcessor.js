@@ -154,7 +154,6 @@ function extractMonthRows(words) {
     if (!seen.has(cand.month)) {
       monthPositions[cand.month] = cand.y;
       seen.add(cand.month);
-      console.log(`  -> ${cand.month}월 발견: y=${cand.y.toFixed(2)}, text="${cand.text}"`);
     }
   }
 
@@ -166,10 +165,18 @@ function extractSalaryBonusColumns(words) {
   let salaryX = null;
   let bonusX = null;
 
-  const salaryWords = words.filter(w => w.text.includes('급여') && !w.text.includes('구간') && !w.text.includes('인정') && w.text.length <= 6);
-  const bonusWords = words.filter(w => w.text.includes('상여') && !w.text.includes('인정') && !w.text.includes('구간') && w.text.length <= 6);
+  const salaryWords = words.filter(w => {
+    const text = w.text.replace(/\s/g, ''); // 공백 제거 후 확인
+    return text.includes('급여') && !text.includes('구간') && !text.includes('인정') && text.length <= 6;
+  });
+  const bonusWords = words.filter(w => {
+    const text = w.text.replace(/\s/g, ''); // 공백 제거 후 확인
+    return text.includes('상여') && !text.includes('인정') && !text.includes('구간') && text.length <= 6;
+  });
 
   console.log(`  -> '급여' 포함 단어 수: ${salaryWords.length}, '상여' 포함 단어 수: ${bonusWords.length}`);
+  if (salaryWords.length > 0) console.log('  -> 급여 후보 단어들:', salaryWords.map(w => `"${w.text}"(x:${w.x0.toFixed(1)})`).join(', '));
+  if (bonusWords.length > 0) console.log('  -> 상여 후보 단어들:', bonusWords.map(w => `"${w.text}"(x:${w.x0.toFixed(1)})`).join(', '));
 
   // 16, 17 찾기
   const col16Candidates = [];
@@ -179,16 +186,32 @@ function extractSalaryBonusColumns(words) {
     const w = words[i];
     const text = w.text.trim();
     
-    // 16 찾기
-    let is16 = text === '16';
+    // 16 찾기 (단일 '16' 또는 분리된 '1', '6')
+    let is16 = text === '16' || text === '⑯' || text === '(16)';
+    if (!is16 && text === '1' && i + 1 < words.length) {
+      const nextW = words[i + 1];
+      if (nextW.text.trim() === '6' && Math.abs(nextW.x0 - w.x0) < 15) { // 15px 이내
+        is16 = true;
+        // console.log(`  -> 분리된 16 발견: x=${w.x0}`);
+      }
+    }
+
     if (is16) {
       // 근처에 급여 텍스트 있는지
       const hasSalaryNear = salaryWords.some(sw => Math.abs(sw.top - w.top) < 10 && (sw.x0 - w.x0) > 0 && (sw.x0 - w.x0) < 100);
       col16Candidates.push({ x: w.x0, priority: hasSalaryNear ? 1 : 2 });
     }
 
-    // 17 찾기
-    let is17 = text === '17';
+    // 17 찾기 (단일 '17' 또는 분리된 '1', '7')
+    let is17 = text === '17' || text === '⑰' || text === '(17)';
+    if (!is17 && text === '1' && i + 1 < words.length) {
+      const nextW = words[i + 1];
+      if (nextW.text.trim() === '7' && Math.abs(nextW.x0 - w.x0) < 15) { // 15px 이내
+        is17 = true;
+        // console.log(`  -> 분리된 17 발견: x=${w.x0}`);
+      }
+    }
+
     if (is17) {
       const hasBonusNear = bonusWords.some(bw => Math.abs(bw.top - w.top) < 10 && (bw.x0 - w.x0) > 0 && (bw.x0 - w.x0) < 100);
       col17Candidates.push({ x: w.x0, priority: hasBonusNear ? 1 : 2 });
@@ -199,7 +222,10 @@ function extractSalaryBonusColumns(words) {
     col16Candidates.sort((a, b) => a.priority - b.priority);
     salaryX = col16Candidates[0].x;
     console.log(`  -> 급여(16) 열 X좌표 후보 선택: ${salaryX}`);
+  } else {
+    console.log('  -> [알림] 숫자 "16"을 찾지 못했습니다.');
   }
+
   if (col17Candidates.length > 0) {
     col17Candidates.sort((a, b) => a.priority - b.priority);
     bonusX = col17Candidates[0].x;
