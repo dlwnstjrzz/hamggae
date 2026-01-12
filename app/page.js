@@ -9,6 +9,7 @@ export default function Home() {
   const [files, setFiles] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processedData, setProcessedData] = useState(null);
+  const [processingTime, setProcessingTime] = useState(null);
   const [error, setError] = useState(null);
 
   const handleFileChange = (e) => {
@@ -39,7 +40,10 @@ export default function Home() {
 
     setIsProcessing(true);
     setError(null);
+    setProcessingTime(null);
     const results = [];
+
+    const startTime = performance.now();
 
     try {
       for (const file of files) {
@@ -51,6 +55,8 @@ export default function Home() {
           // 개별 파일 에러는 무시하고 진행하거나 표시
         }
       }
+      const endTime = performance.now();
+      setProcessingTime((endTime - startTime) / 1000);
       setProcessedData(results);
     } catch (err) {
       console.error(err);
@@ -81,10 +87,11 @@ export default function Home() {
   const handleReset = () => {
     setFiles([]);
     setProcessedData(null);
+    setProcessingTime(null);
     setError(null);
   };
 
-  const totalEmployees = processedData ? processedData.reduce((acc, curr) => acc + curr.employees.length, 0) : 0;
+  const totalEmployees = processedData ? processedData.reduce((acc, curr) => acc + (curr.employees?.length || 0) + (curr.executives?.length || 0), 0) : 0;
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-100">
@@ -212,6 +219,11 @@ export default function Home() {
                           <p className="font-bold">처리가 완료되었습니다!</p>
                           <p className="text-sm text-green-700">
                             총 {processedData.length}개 파일에서 {totalEmployees}명의 사원 정보를 추출했습니다.
+                            {processingTime && (
+                              <span className="block mt-1 font-medium">
+                                소요 시간: {processingTime.toFixed(2)}초
+                              </span>
+                            )}
                           </p>
                         </div>
                       </div>
