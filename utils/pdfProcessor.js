@@ -12,7 +12,11 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjsLib.vers
 export async function processPDF(file) {
   console.log(`\n=== 파일 처리 시작: ${file.name} ===`);
   const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pdf = await pdfjsLib.getDocument({ 
+    data: arrayBuffer, 
+    cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/cmaps/`,
+    cMapPacked: true 
+  }).promise;
   
   // 첫 페이지를 읽어서 파일 타입 판별
   // 1~3페이지까지 확인 (사용자 요청)
