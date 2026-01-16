@@ -1,4 +1,3 @@
-
 // 날짜 정규화 (YYYY-MM-DD)
 export function normalizeDate(dateStr) {
   if (!dateStr || dateStr === '-' || dateStr.trim() === '') return null;
@@ -20,14 +19,17 @@ export function normalizeDate(dateStr) {
   return null;
 }
 
+
 // PDF 페이지에서 단어 추출 (pdfplumber 스타일로 변환 - 글자 병합 로직 추가)
-export async function extractWordsFromPage(page, pageNum) {
-  console.log(`[Page ${pageNum}] 텍스트 추출 시작`);
+export async function extractWordsFromPage(page, pageNum, mergeTolerance = 15) {
+  // console.log(`[Page ${pageNum}] 텍스트 추출 시작`);
   const textContent = await page.getTextContent();
   const viewport = page.getViewport({ scale: 1.0 });
   
-  // 1. 원본 아이템 추출 및 좌표 변환
-  let items = textContent.items.map(item => {
+  let items = [];
+
+  // 기존 텍스트 레이어 사용
+  items = textContent.items.map(item => {
     // pdf.js transform: [scaleX, skewY, skewX, scaleY, x, y]
     const tx = item.transform;
     const x = tx[4];
@@ -75,7 +77,7 @@ export async function extractWordsFromPage(page, pageNum) {
     // 바로 옆에 붙어있는지 확인 (X좌표 차이가 적음)
     // 글자 사이 간격이 좁으면 같은 단어로 취급
     const distance = item.x0 - currentWord.x1;
-    const isAdjacent = distance < 5; // 5px 이내면 합침 (조절 가능)
+    const isAdjacent = distance < mergeTolerance; // 5px 이내면 합침 (조절 가능) 
 
     if (isSameLine && isAdjacent) {
       // 병합
@@ -90,7 +92,7 @@ export async function extractWordsFromPage(page, pageNum) {
     }
   }
   words.push(currentWord); // 마지막 단어 저장
-
-  console.log(`[Page ${pageNum}] 추출된 단어 수: ${words.length}`);
+  // console.log('words', words)
+  // console.log(`[Page ${pageNum}] 추출된 단어 수: ${words.length}`);
   return { words, viewport };
 }

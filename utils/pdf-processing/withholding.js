@@ -265,7 +265,7 @@ export async function processWithholdingPDF(pdf, filename, preLoadedWords) {
       words = preLoadedWords;
     } else {
       const page = await pdf.getPage(i + 1);
-      const res = await extractWordsFromPage(page, i + 1);
+      const res = await extractWordsFromPage(page, i + 1, 5);
       words = res.words;
     }
 
