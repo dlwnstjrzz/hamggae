@@ -24,7 +24,6 @@ export async function processPDF(file) {
     const { words } = await extractWordsFromPage(page, i);
     const fullText = words.map(w => w.text).join('');
     const textNoSpace = fullText.replace(/\s/g, '');
-    console.log('fullText', fullText);
     
     if (i === 1) words1 = words; // 원천징수부/등기부는 1페이지만 봐도 됨
 

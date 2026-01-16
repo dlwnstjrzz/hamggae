@@ -9,6 +9,75 @@ export async function generateExcel(results) {
   const registryResults = results.filter(r => r.type === 'registry');
   const taxReturnResults = results.filter(r => r.type === 'taxReturn');
 
+  // 1.5 임원 필터링 (등기부 임원은 원천징수부에서 제외)
+  // 임원 재직 기간 정보 구축
+  const executiveTenures = [];
+  registryResults.forEach(reg => {
+      reg.executives.forEach(exec => {
+          const sortedHistory = [...exec.history].sort((a,b) => new Date(a.date) - new Date(b.date));
+          if(sortedHistory.length === 0) return;
+          
+          let startDate = sortedHistory[0].date;
+          let endDate = '9999-12-31'; // 현재 재직 중으로 간주
+          
+          // 마지막 기록이 퇴임 성격이면 종료일 설정
+          const lastEvt = sortedHistory[sortedHistory.length-1];
+          if(['사임','퇴임','만료','해임'].includes(lastEvt.type)) {
+              endDate = lastEvt.date;
+          }
+          
+          // 주민번호 앞자리 추출
+          let juminFront = '';
+          if (exec.id && exec.id.includes('-')) {
+             juminFront = exec.id.split('-')[0];
+          }
+
+          executiveTenures.push({
+              name: exec.name,
+              juminFront: juminFront,
+              start: startDate,
+              end: endDate
+          });
+      });
+  });
+
+  // 원천징수부 데이터에서 임원 제거
+  withholdingResults.forEach(res => {
+      if(!res.year || res.year === 'Unknown') return;
+      const targetYear = parseInt(res.year);
+      const yearStart = `${targetYear}-01-01`;
+      const yearEnd = `${targetYear}-12-31`;
+      
+      const originalCount = res.employees.length;
+      res.employees = res.employees.filter(emp => {
+          // 해당 사원의 주민번호 앞자리
+          let empJuminFront = '';
+          if (emp.주민등록번호 && emp.주민등록번호.includes('-')) {
+              empJuminFront = emp.주민등록번호.split('-')[0];
+          }
+          
+          // 임원 여부 확인 (이름 + 주민번호앞자리 + 기간 겹침)
+          const isExec = executiveTenures.some(ex => {
+              if (ex.name !== emp.성명) return false;
+              // 주민번호 앞자리가 둘 다 존재하면 비교, 하나라도 없으면 이름만으로(위험하지만 fallback)
+              if (ex.juminFront && empJuminFront && ex.juminFront !== empJuminFront) return false;
+              
+              // 기간 교집합 확인: (Start <= YearEnd) AND (End >= YearStart)
+              return (ex.start <= yearEnd && ex.end >= yearStart);
+          });
+          
+          if(isExec) {
+              console.log(`[필터링] ${targetYear}년 원천징수부: 임원 '${emp.성명}' 제거 (재직기간: ${targetYear}년 포함)`);
+              return false; // 제거
+          }
+          return true; // 유지
+      });
+      
+      if (originalCount !== res.employees.length) {
+          console.log(`-> ${targetYear}년 총 ${originalCount}명 중 ${originalCount - res.employees.length}명(임원) 제외됨.`);
+      }
+  });
+
   // 2. 원천징수부 데이터 처리 (기존 로직)
   const dataByYear = {};
   const frontNumberGroups = {};
@@ -252,6 +321,85 @@ export async function generateExcel(results) {
                       cell.border = borderStyle;
                       if (colNum >= 2) cell.style = { ...cell.style, ...numberStyle };
                       else cell.alignment = { vertical: 'middle', horizontal: 'left' };
+                  });
+                  currentRowIdx++;
+              });
+          }
+
+          currentRowIdx += 2; // 간격
+
+          // [섹션 4] 주식등변동상황(최대주주) 명세서
+          
+          // 4-1. 연도별 데이터 전파(Forward Fill) 로직
+          const shareholderMap = {};
+          let lastShareholders = [];
+          
+          // 연도 오름차순 순회
+          sortedYears.forEach(year => {
+              const res = taxReturnResults.find(r => r.year == year);
+              
+              // 해당 연도에 추출된 주주 명단이 있으면 갱신 (변동 발생)
+              if (res && res.data && res.data.shareholders && res.data.shareholders.length > 0) {
+                  lastShareholders = res.data.shareholders;
+              }
+              
+              // 데이터가 있든 없든(전년도 복사), 해당 연도 데이터로 확정
+              if (lastShareholders.length > 0) {
+                  shareholderMap[year] = lastShareholders;
+              }
+          });
+
+          // 4-2. 모든 연도에 등장하는 주주 목록 수집 (Union)
+          const allShareholderKeys = new Set();
+          const shareholderInfoMap = {}; // Key -> { name, relName, id }
+          
+          Object.values(shareholderMap).forEach(list => {
+              list.forEach(sh => {
+                  const key = `${sh.name}_${sh.id.split('-')[0]}`; // 이름_주민앞자리 로 식별
+                  allShareholderKeys.add(key);
+                  if (!shareholderInfoMap[key]) {
+                      shareholderInfoMap[key] = { 
+                          name: sh.name, 
+                          relName: sh.relName, // 가장 최근 관계명 기준? (관계는 변할 수 있으나 일단 저장)
+                          id: sh.id
+                      };
+                  }
+              });
+          });
+
+          if (allShareholderKeys.size > 0) {
+              const shareHeaderRow = wsTax.getRow(currentRowIdx);
+              shareHeaderRow.values = ['주주명', '관계', ...sortedYears.map(y => `${y}년`)];
+              shareHeaderRow.eachCell(cell => cell.style = headerStyle);
+              currentRowIdx++;
+              
+              const sortedKeys = Array.from(allShareholderKeys).sort();
+
+              sortedKeys.forEach(key => {
+                  const info = shareholderInfoMap[key];
+                  const rowValues = [info.name, info.relName || ''];
+                  
+                  sortedYears.forEach(year => {
+                      const list = shareholderMap[year] || [];
+                      const target = list.find(s => `${s.name}_${s.id.split('-')[0]}` === key);
+                      
+                      if (target) {
+                          rowValues.push(`${target.ratio}%`);
+                      } else {
+                          rowValues.push('');
+                      }
+                  });
+                  
+                  const row = wsTax.getRow(currentRowIdx);
+                  row.values = rowValues;
+                  
+                  row.eachCell((cell, colNum) => {
+                      cell.border = borderStyle;
+                      if (colNum >= 3) { // 3열부터(연도 데이터) 우측 정렬
+                          cell.alignment = { vertical: 'middle', horizontal: 'right' };
+                      } else {
+                          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                      }
                   });
                   currentRowIdx++;
               });

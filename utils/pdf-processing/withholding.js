@@ -7,13 +7,11 @@ function isFirstPage(words) {
   const hasHireDate = textNoSpace.includes('입사일') || textNoSpace.includes('퇴사일');
   const hasTitle = textNoSpace.includes('근로소득지급명세');
   
-  console.log(`[isFirstPage] 입사일/퇴사일: ${hasHireDate}, 제목: ${hasTitle}`);
   
   return hasHireDate || hasTitle;
 }
 
 function extractMonthRows(words) {
-  console.log('[extractMonthRows] 월별 행 찾기 시작');
   const monthPositions = {};
   const monthCandidates = [];
 
@@ -58,7 +56,6 @@ function extractMonthRows(words) {
 }
 
 function extractSalaryBonusColumns(words) {
-  console.log('[extractSalaryBonusColumns] 급여/상여 열 찾기 시작');
   let salaryX = null;
   let bonusX = null;
 
@@ -70,10 +67,6 @@ function extractSalaryBonusColumns(words) {
     const text = w.text.replace(/\s/g, ''); // 공백 제거 후 확인
     return text.includes('상여') && !text.includes('인정') && !text.includes('구간') && text.length <= 6;
   });
-
-  console.log(`  -> '급여' 포함 단어 수: ${salaryWords.length}, '상여' 포함 단어 수: ${bonusWords.length}`);
-  if (salaryWords.length > 0) console.log('  -> 급여 후보 단어들:', salaryWords.map(w => `"${w.text}"(x:${w.x0.toFixed(1)})`).join(', '));
-  if (bonusWords.length > 0) console.log('  -> 상여 후보 단어들:', bonusWords.map(w => `"${w.text}"(x:${w.x0.toFixed(1)})`).join(', '));
 
   // 16, 17 찾기
   const col16Candidates = [];
@@ -118,25 +111,20 @@ function extractSalaryBonusColumns(words) {
   if (col16Candidates.length > 0) {
     col16Candidates.sort((a, b) => a.priority - b.priority);
     salaryX = col16Candidates[0].x;
-    console.log(`  -> 급여(16) 열 X좌표 후보 선택: ${salaryX}`);
   } else {
-    console.log('  -> [알림] 숫자 "16"을 찾지 못했습니다.');
   }
 
   if (col17Candidates.length > 0) {
     col17Candidates.sort((a, b) => a.priority - b.priority);
     bonusX = col17Candidates[0].x;
-    console.log(`  -> 상여(17) 열 X좌표 후보 선택: ${bonusX}`);
   }
 
   // Fallback
   if (salaryX === null && salaryWords.length > 0) {
     salaryX = salaryWords[0].x0;
-    console.log(`  -> 급여 텍스트 기준 X좌표 선택: ${salaryX}`);
   }
   if (bonusX === null && bonusWords.length > 0) {
     bonusX = bonusWords[0].x0;
-    console.log(`  -> 상여 텍스트 기준 X좌표 선택: ${bonusX}`);
   }
 
   return { salaryX, bonusX };
@@ -155,7 +143,6 @@ function extractValueAtPosition(words, targetX, targetY, toleranceX = 40, tolera
 }
 
 function extractEmployeeData(words, year) {
-  console.log('[extractEmployeeData] 사원 정보 추출 시작');
   const data = {
     성명: '',
     주민등록번호: '',
@@ -172,29 +159,26 @@ function extractEmployeeData(words, year) {
   }
 
   const fullText = words.map(w => w.text).join(' '); // 공백 포함 연결
-  console.log(`  -> 전체 텍스트 길이: ${fullText.length}`);
 
   // 성명
   const nameMatch = fullText.match(/⑤\s*성\s*명\s+([^\s⑥]+)/) || fullText.match(/성\s*명\s+([^\s⑥]+)/);
   if (nameMatch) {
     data.성명 = nameMatch[1].trim();
-    console.log(`  -> 성명 추출: ${data.성명}`);
   } else {
-    console.log('  -> 성명 추출 실패');
   }
 
-  // 주민등록번호
+  // 주민등록번호 (무조건 뒷자리 마스킹 처리)
   const juminMatch = fullText.match(/⑥\s*주민등록번호\s+(\d{6}-(?:\d{7}|\d\*{6}|\*{7}))/) || fullText.match(/주민등록번호\s+(\d{6}-(?:\d{7}|\d\*{6}|\*{7}))/);
   if (juminMatch) {
-    data.주민등록번호 = juminMatch[1].trim();
-    console.log(`  -> 주민등록번호 추출: ${data.주민등록번호}`);
+    const rawJumin = juminMatch[1].trim();
+    const frontPart = rawJumin.split('-')[0];
+    data.주민등록번호 = `${frontPart}-*******`;
   }
 
   // 입사일
   const hireMatch = fullText.match(/⑦\s*입사일\s+([^\s⑧]+)/) || fullText.match(/입사일\s+([^\s⑧퇴]+)/);
   if (hireMatch) {
     data.입사일 = normalizeDate(hireMatch[1].trim());
-    console.log(`  -> 입사일 추출: ${data.입사일}`);
   }
 
   // 퇴사일
@@ -209,13 +193,11 @@ function extractEmployeeData(words, year) {
         if (rDateObj <= yearEnd) {
           data.퇴사일 = rDate;
         } else {
-          console.log(`  -> 퇴사일(${rDate})이 연말(${year}-12-31) 이후이므로 무시`);
         }
       } else {
         data.퇴사일 = rDate;
       }
     }
-    console.log(`  -> 퇴사일 최종: ${data.퇴사일}`);
   }
 
   // 월별 데이터
@@ -229,23 +211,19 @@ function extractEmployeeData(words, year) {
         if (salaryX) {
           const val = extractValueAtPosition(words, salaryX, y);
           data.monthly_salary[m] = val;
-          if (val > 0) console.log(`    -> ${m}월 급여: ${val}`);
         }
         if (bonusX) {
           const val = extractValueAtPosition(words, bonusX, y);
           data.monthly_bonus[m] = val;
-          if (val > 0) console.log(`    -> ${m}월 상여: ${val}`);
         }
       }
     }
   } else {
-    console.log('  -> [경고] 급여/상여 열 좌표를 찾지 못했습니다.');
   }
 
   // 합계 계산
   data.총급여액 = Object.values(data.monthly_salary).reduce((a, b) => a + b, 0);
   data.총상여액 = Object.values(data.monthly_bonus).reduce((a, b) => a + b, 0);
-  console.log(`  -> 총급여: ${data.총급여액}, 총상여: ${data.총상여액}`);
 
   return data;
 }
@@ -270,11 +248,9 @@ export async function processWithholdingPDF(pdf, filename, preLoadedWords) {
     }
 
     if (isFirstPage(words)) {
-      console.log(`[Page ${i + 1}] 사원 첫 페이지 감지됨`);
       const empData = extractEmployeeData(words, year);
       if (empData.성명) {
         employees.push(empData);
-        console.log(`-> 사원 추가됨: ${empData.성명}`);
       } else {
         console.log(`-> [경고] 성명을 찾지 못해 사원 추가 실패`);
       }

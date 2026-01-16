@@ -15,11 +15,8 @@ function findTaxBaseFromFullText(words) {
     
     if (numberMatch) {
       const val = parseInt(numberMatch[1].replace(/,/g, ''), 10);
-      console.log(`-> 과세표준 값 발견 (FullText): ${val}`);
       return val;
     }
   }
   return 0;
 }
-
-console.log("Syntax check passed");

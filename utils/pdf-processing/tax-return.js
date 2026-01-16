@@ -82,7 +82,6 @@ function findValueByKeywords(words, keyword, indicator) {
 function findValueFromFullText(words, keyword, debugName = keyword, targetIndex = 0, requiredIndicator = null) {
   // 단어들을 공백으로 연결하여 전체 텍스트 생성
   const fullText = words.map(w => w.text).join(' ');
-  console.log(`[DEBUG] FullText fragment for ${debugName}:`, fullText.substring(0, 200) + '...');
   
   // 키워드 찾기 (글자 사이 공백 허용, 전역 검색)
   const keywordPattern = keyword.split('').join('\\s*');
@@ -91,11 +90,9 @@ function findValueFromFullText(words, keyword, debugName = keyword, targetIndex 
   let match;
   
   while ((match = keywordRegex.exec(fullText)) !== null) {
-    console.log(`[DEBUG] ${debugName} keyword found at index:`, match.index);
     
     // 키워드 이후의 텍스트만 추출
     let textAfter = fullText.substring(match.index + match[0].length);
-    console.log(`[DEBUG] Text after ${debugName} keyword (first 50 chars):`, textAfter.substring(0, 50));
     
     // targetIndex 만큼 숫자 매칭 반복
     let foundValue = 0;
@@ -139,7 +136,6 @@ function findValueFromFullText(words, keyword, debugName = keyword, targetIndex 
             // 필수 지시자 검증
             if (requiredIndicator) {
                 if (foundInd !== requiredIndicator) {
-                    console.log(`[DEBUG] Required indicator mismatch at index ${i}. Required: '${requiredIndicator}', Found: '${foundInd}'`);
                     success = false;
                     break; 
                 }
@@ -148,7 +144,6 @@ function findValueFromFullText(words, keyword, debugName = keyword, targetIndex 
             if (i === targetIndex) {
                 const val = parseInt(valStr.replace(/,/g, ''), 10);
                 if (!isNaN(val)) {
-                    console.log(`-> ${debugName} 값 발견 (Index ${i}): ${val} (Raw: ${valStr})`);
                     foundValue = val;
                 } else {
                     success = false;
@@ -157,7 +152,6 @@ function findValueFromFullText(words, keyword, debugName = keyword, targetIndex 
             // 다음 숫자를 찾기 위해 현재 매칭된 부분을 건너뜀
             textAfter = textAfter.substring(m.index + matchLen);
         } else {
-            console.log(`[DEBUG] Failed to find valid pattern at index ${i} for ${debugName}`);
             success = false;
             break;
         }
@@ -167,7 +161,6 @@ function findValueFromFullText(words, keyword, debugName = keyword, targetIndex 
         return foundValue;
     }
     
-    console.log(`[DEBUG] No valid match found for ${debugName} at this occurrence. Searching next...`);
   }
   
   console.log(`[DEBUG] ${debugName} keyword search finished. No valid value found.`);
@@ -410,6 +403,156 @@ export async function processTaxReturnPDF(pdf, filename) {
                // console.log(`   - [Skip] 금액 미달/0: ${name} (${code}) = ${amount}`);
            }
        }
+    }
+
+    // 주식등변동상황명세서 감지
+    if (textNoSpace.includes('주식등변동상황명세서')) {
+        console.log(`[Page ${i + 1}] 주식등변동상황명세서 감지 - Raw Text 추출`);
+        
+        const rawContent = await page.getTextContent();
+        const rawTextWithSpace = rawContent.items.map(item => item.str).join(' ');
+        
+        console.log(`--- [DEBUG] Share Page Raw Text Start ---`);
+        console.log(rawTextWithSpace);
+        console.log(`--- [DEBUG] Share Page Raw Text End ---`);
+
+        // 관계 코드 매핑
+        const RELATION_CODES = {
+            '00': '본인(최대주주)',
+            '01': '배우자',
+            '02': '자',
+            '03': '부모',
+            '04': '형제·자매',
+            '05': '손',
+            '06': '조부모',
+            '07': '02~06의 배우자',
+            '08': '01~07 이외의 친족',
+            // '09': '기타', // 제외
+            // '10': '특수관계법인' // 제외
+        };
+
+        const shareholders = [];
+        
+        // 행 추출 정규식: (개인|법인)
+        // 숫자 인덱스는 무시하고 "개인" 또는 "법인" 키워드 기준으로 청크 분리
+        const rowRegex = /(개\s*인|법\s*인)/g;
+        let match;
+        
+        // 매칭된 위치들을 찾아서 청크로 나눔
+        const matches = [];
+        while ((match = rowRegex.exec(rawTextWithSpace)) !== null) {
+            matches.push({ index: null, type: match[1], start: match.index });
+        }
+        console.log(`[DEBUG] Shareholder Rows Found: ${matches.length}`);
+
+        for (let k = 0; k < matches.length; k++) {
+            const m = matches[k];
+            const nextStart = (k < matches.length - 1) ? matches[k+1].start : rawTextWithSpace.length;
+            let chunk = rawTextWithSpace.substring(m.start, nextStart);
+            
+            // 다음 행의 인덱스 번호(예: "4")가 청크 끝에 포함될 수 있으므로 제거
+            // " ... 0 0  4   " -> " ... 0 0"
+            chunk = chunk.replace(/\s+\d+\s*$/, '');
+            
+            // 1. 이름 추출 (개인/법인 뒤에 나오는 한글/영문)
+            // 예: "3 개인 원 지 연 ..."
+            // 공백을 포함하여 이름이 흩어져 있을 수 있음. 
+            // Type(개인) 뒤 ~ 주민번호 앞 까지가 이름 영역
+            
+            console.log(`[DEBUG] Check Chunk(${k}): "${chunk}"`);
+
+            // 주민번호 찾기 (공백 포함된 패턴)
+            const idRegex = /(\d[\s\d]{5,10}-\s*[\d\s*]{7,14})/; // 숫자/공백 6자리 + - + 7자리
+            const idMatch = chunk.match(idRegex);
+            console.log(`[DEBUG] ID Match Result:`, idMatch ? idMatch[0] : 'None');
+            
+            if (idMatch) {
+                const rawID = idMatch[1];
+                const cleanID = rawID.replace(/\s/g, '');
+                
+                // 이름 영역: chunk 시작 ~ ID 시작 전
+                // "3 개인 " 이후 ~ ID 전
+                const typeIndex = chunk.indexOf(m.type);
+                const idIndex = chunk.indexOf(rawID);
+                
+                if (typeIndex !== -1 && idIndex !== -1 && idIndex > typeIndex) {
+                    const rawName = chunk.substring(typeIndex + m.type.length, idIndex).trim();
+                    const cleanName = rawName.replace(/\s/g, '').replace(/\d+/g, ''); // 이름 공백 및 숫자 제거 (예: "고영우6" -> "고영우")
+                    
+                    // 값 영역: ID 끝 ~ Chunk 끝
+                    // 대한민국 KR 등 문자열 제거 필요
+                    let tail = chunk.substring(idIndex + rawID.length);
+                    // 공백 제거 후 분석
+                    const cleanTail = tail.replace(/\s/g, '').replace(/대한민국/g, '').replace(/KR/g, '');
+                    console.log(`[DEBUG] Clean Tail: "${cleanTail}"`);
+                    // cleanTail 예상: "1,600401,6004000" (기초...기말[주식][지분][코드])
+                    // 뒤에 "일련번호..." 같은 쓰레기 값이 붙을 수 있으므로 정규식으로 앞부분 숫자+코드만 추출
+                    const tailMatch = cleanTail.match(/^([\d,.]+)(\d{2})/);
+                    
+                    if (tailMatch) {
+                        const numericPart = tailMatch[1];
+                        const code = tailMatch[2];
+                        console.log(`[DEBUG] Code: "${code}", Numeric Part: "${numericPart}"`);
+
+                        if (RELATION_CODES[code]) {
+                            // 숫자 파싱 (Comma 활용)
+                            // 기말 주식수와 지분율 분리
+                            // numericPart: "...1,20030" (마지막이 기말데이터)
+                            // 콤마가 있다면 마지막 콤마 기준 + 3자리 숫자가 주식수 끝이라고 가정
+                            
+                            const lastComma = numericPart.lastIndexOf(',');
+                            let shares = 0;
+                            let ratio = 0;
+                            
+                            if (lastComma !== -1 && lastComma + 4 <= numericPart.length) {
+                                // 콤마 뒤 3자리까지가 주식수 ("1,200")
+                                // 그 뒤가 지분율 ("30")
+                                // splitIdx: 주식수 끝나는 지점
+                                const splitIdx = lastComma + 4;
+                                
+                                // ratioStr ("30")
+                                const ratioStr = numericPart.substring(splitIdx);
+                                ratio = parseFloat(ratioStr);
+
+                                // sharesStr ("...1,200")
+                                // 앞부분에 기초데이터가 섞여있으므로 뒤에서부터 숫자 덩어리 추출
+                                const prefix = numericPart.substring(0, splitIdx);
+                                const sharesMatch = prefix.match(/[\d,]+$/);
+                                if (sharesMatch) {
+                                    shares = parseInt(sharesMatch[0].replace(/,/g, ''), 10);
+                                }
+                            } else {
+                                // 콤마 없을 때 (100주 100% -> 100100)
+                                // 뒤에서 2~3자리를 지분율로 가정 (Fallback)
+                                const ratioLen = (numericPart.endsWith('100')) ? 3 : 2;
+                                const ratioStr = numericPart.slice(-ratioLen);
+                                const sharesStr = numericPart.slice(0, -ratioLen);
+                                
+                                ratio = parseFloat(ratioStr);
+                                const sMatch = sharesStr.match(/[\d,]+$/);
+                                if (sMatch) shares = parseInt(sMatch[0].replace(/,/g, ''), 10);
+                            }
+
+                            if (shares > 0) {
+                                shareholders.push({
+                                    name: cleanName,
+                                    id: `${cleanID.substring(0,6)}-*******`, // 주민번호 마스킹
+                                    shares: shares,
+                                    ratio: ratio,
+                                    relCode: code,
+                                    relName: RELATION_CODES[code]
+                                });
+                                console.log(`   + [주주] ${cleanName} (${RELATION_CODES[code]}) : ${shares}주, ${ratio}%`);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (shareholders.length > 0) {
+             result.data.shareholders = shareholders;
+        }
     }
   }
 

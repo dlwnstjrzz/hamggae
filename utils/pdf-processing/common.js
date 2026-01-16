@@ -92,7 +92,6 @@ export async function extractWordsFromPage(page, pageNum, mergeTolerance = 15) {
     }
   }
   words.push(currentWord); // 마지막 단어 저장
-  // console.log('words', words)
-  // console.log(`[Page ${pageNum}] 추출된 단어 수: ${words.length}`);
+
   return { words, viewport };
 }
