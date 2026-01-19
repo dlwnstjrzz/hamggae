@@ -82,8 +82,11 @@ function findValueByKeywords(words, keyword, indicator) {
 function findValueFromFullText(words, keyword, debugName = keyword, targetIndex = 0, requiredIndicator = null) {
   // 단어들을 공백으로 연결하여 전체 텍스트 생성
   const fullText = words.map(w => w.text).join(' ');
+
+  console.log(`[DEBUG] findValueFromFullText [${debugName}] fullText:`, fullText);
   
   // 키워드 찾기 (글자 사이 공백 허용, 전역 검색)
+  // 예: "과세표준" -> "과\s*세\s*표\s*준" (과 세 표 준, 과세표준 등 모두 매칭)
   const keywordPattern = keyword.split('').join('\\s*');
   const keywordRegex = new RegExp(keywordPattern, 'g');
   
@@ -101,33 +104,38 @@ function findValueFromFullText(words, keyword, debugName = keyword, targetIndex 
     for (let i = 0; i <= targetIndex; i++) {
         let valStr = null;
         let foundInd = null;
+        let sign = null; // 부호 (△, -)
         let matchLen = 0;
 
+        // 정규식 공통: 숫자 앞의 부호([△\-−]?) 허용. (마이너스 기호 다양성 고려)
         // 1. 괄호가 있는 경우 (예: "가감계 (- +) 21 1,000")
         // (\d{1,3}(?![\d,]))? : 괄호 뒤 Optional 지시자
-        let m = textAfter.match(/^\s*[\(\[][^\)\]]*[\)\]]\s*(\d{1,3}(?![\d,]))?\s*[:]?\s*([\d,]+)/);
+        let m = textAfter.match(/^\s*[\(\[][^\)\]]*[\)\]]\s*(\d{1,3}(?![\d,]))?\s*[:]?\s*([△\-−]?)\s*([\d,]+)/);
         if (m) {
             foundInd = m[1]; // 지시자 (있을 수도 없을 수도)
-            valStr = m[2];   // 값
+            sign = m[2];     // 부호
+            valStr = m[3];   // 값
             matchLen = m[0].length;
         }
 
         // 2. 지시자 + 공백 + 값 (예: "가감계 21 1,000")
         if (!m) {
-            m = textAfter.match(/^\s*(\d{1,3})\s+([\d,]+)/);
+            m = textAfter.match(/^\s*(\d{1,3})\s+([△\-−]?)\s*([\d,]+)/);
             if (m) {
                 foundInd = m[1];
-                valStr = m[2];
+                sign = m[2];
+                valStr = m[3];
                 matchLen = m[0].length;
             }
         }
 
-        // 3. 지시자 없이 바로 숫자 (예: "과세표준 1,000")
+        // 3. 지시자 없이 바로 숫자 (예: "과세표준 1,000", "과 세 표 준 △72,142,319")
         if (!m) {
-            m = textAfter.match(/^\s*([\d,]+)/);
+            m = textAfter.match(/^\s*([△\-−]?)\s*([\d,]+)/);
             if (m) {
                 foundInd = null;
-                valStr = m[1];
+                sign = m[1];
+                valStr = m[2];
                 matchLen = m[0].length;
             }
         }
@@ -142,9 +150,16 @@ function findValueFromFullText(words, keyword, debugName = keyword, targetIndex 
             }
 
             if (i === targetIndex) {
-                const val = parseInt(valStr.replace(/,/g, ''), 10);
+                let val = parseInt(valStr.replace(/,/g, ''), 10);
+                // 부호 처리 (△, -, − 이면 음수)
+                if (sign && (sign === '△' || sign === '-' || sign === '−')) {
+                    val = -val;
+                }
+
                 if (!isNaN(val)) {
                     foundValue = val;
+                    // 디버그 로그 추가
+                    console.log(`   -> Found Value for ${debugName}: ${val} (Raw: ${sign || ''}${valStr})`);
                 } else {
                     success = false;
                 }
@@ -202,14 +217,32 @@ export async function processTaxReturnPDF(pdf, filename) {
     // 1. 법인세과세표준및세액신고서 (과세표준, 산출세액 추출)
     if (textNoSpace.includes('법인세과세표준및세액신고서')) {
       console.log(`[Page ${i + 1}] 법인세과세표준및세액신고서 발견`);
+      
+      // 연도 추출 보완 (문서 내용 우선)
+      // 예: "⑪사 업 연 도2024.01.01~ 2024.12.31"
+      // 공백 제거된 텍스트에서 패턴 찾기: 사업연도(\d{4})
+      const yearMatchContent = textNoSpace.match(/사업연도(\d{4})/);
+      if (yearMatchContent) {
+          result.year = yearMatchContent[1];
+          console.log(`-> [법인세신고서] 문서 내용에서 연도 추출: ${result.year}`);
+      } else {
+          // 공백 포함 텍스트에서 찾기 (Backup)
+          const yearMatchRaw = fullText.match(/사\s*업\s*연\s*도\s*(\d{4})/);
+          if (yearMatchRaw) {
+              result.year = yearMatchRaw[1];
+              console.log(`-> [법인세신고서] 문서 내용(Raw)에서 연도 추출: ${result.year}`);
+          }
+      }
+
       result.data.taxBase = findValueFromFullText(words, '과세표준', '과세표준');
       // 과세표준과 동일한 로직으로 산출세액 추출
       result.data.calculatedTax = findValueFromFullText(words, '산출세액', '산출세액');
     }
 
     // 2. 법인세과세표준및세액조정계산서 (나머지 항목 추출)
-    if (textNoSpace.includes('법인세과세표준및세액조정계산서')) {
-      console.log(`[Page ${i + 1}] 법인세과세표준및세액조정계산서 발견`);
+    // 줄바꿈 등으로 "법인세과세표준및..." 전체가 안 붙어있을 수 있으므로 "세액조정계산서"만 포함돼도 인정
+    if (textNoSpace.includes('세액조정계산서')) {
+      console.log(`[Page ${i + 1}] 법인세과세표준및세액조정계산서(세액조정계산서 키워드) 발견`);
       
       // 1. 산출세액 (12) -> 기존 로직 유지하되, 위에서 찾았으면 덮어쓰지 않거나 여기서 찾은걸 우선할지 결정
       // 사용자가 "이 페이지에서 가져올거야"라고 했으므로 위에서 찾은 값이 0이 아니면 여기서 다시 찾을 필요 없거나
@@ -222,6 +255,34 @@ export async function processTaxReturnPDF(pdf, filename) {
       // 2. 최저한세 적용대상 (17) - 감면세액
       // FullText 기반 탐색으로 변경 (로그 확인용)
       // 여러 패턴 시도: 17이 붙어있는 경우, full name인 경우, 짧은 이름인 경우
+      
+      // [0순위] 유연한 17번 탐색 (사용자 요청: 키워드 뒤 20자 이내에 17이 있으면 추출)
+      // "최저한세적용대상" ... (어쩌구) ... "17" ... (값)
+      if (result.data.minTaxTarget === 0) {
+          // 키워드 "최저한세적용대상"의 각 글자 사이에 \s* 허용
+          const baseKeyword = '최저한세적용대상';
+          const keywordPattern = baseKeyword.split('').join('\\s*');
+          
+          // 키워드 + (0~20자 아무거나) + (17 또는 (17)) + 공백 + (부호+숫자)
+          const smartRegex = new RegExp(`${keywordPattern}[\\s\\S]{0,20}?(?:17|\\(17\\))\\s*([△\\-−]?[\\d,]+)`);
+          const m = fullText.match(smartRegex);
+          
+          if (m) {
+              const valStr = m[1];
+              // 부호 처리
+              let sign = 1;
+              if (valStr.startsWith('△') || valStr.startsWith('-') || valStr.startsWith('−')) {
+                 sign = -1;
+              }
+              const val = parseInt(valStr.replace(/[△\-−,]/g, ''), 10);
+              
+              if (!isNaN(val)) {
+                  result.data.minTaxTarget = val * sign;
+                  console.log(`-> [SmartMatch] 최저한세적용대상 + 17 (유연한 검색) 성공: ${result.data.minTaxTarget}`);
+              }
+          }
+      }
+
       if (result.data.minTaxTarget === 0) {
         // 1순위: "최저한세적용대상공제감면세액17" (사용자 제보 패턴: 17이 텍스트처럼 붙어있는 경우)
         result.data.minTaxTarget = findValueFromFullText(words, '최저한세적용대상공제감면세액17', '최저한세적용대상(17포함)');
@@ -231,7 +292,12 @@ export async function processTaxReturnPDF(pdf, filename) {
            result.data.minTaxTarget = findValueFromFullText(words, '최저한세적용대상공제감면세액', '최저한세적용대상(풀네임)');
         }
         
-        // 3순위: "최저한세적용대상" (가장 짧은 형태, 뒤에 다른 문자가 오면 실패할 수 있음)
+        // 3순위: "최저한세적용대상17" (짧은 이름 뒤에 17이 붙은 경우) - 사용자 요청
+        if (result.data.minTaxTarget === 0) {
+           result.data.minTaxTarget = findValueFromFullText(words, '최저한세적용대상17', '최저한세적용대상(짧은+17포함)');
+        }
+
+        // 4순위: "최저한세적용대상" (가장 짧은 형태, 뒤에 다른 문자가 오면 실패할 수 있음)
         if (result.data.minTaxTarget === 0) {
            result.data.minTaxTarget = findValueFromFullText(words, '최저한세적용대상', '최저한세적용대상(짧은)');
         }
@@ -254,6 +320,12 @@ export async function processTaxReturnPDF(pdf, filename) {
       if (result.data.totalAdjustment === 0) {
         result.data.totalAdjustment = findValueFromFullText(words, '가감계', '가감계', 0, '21');
       }
+
+      console.log(`[DEBUG_PAGE_ADJUST] 법인세과세표준및세액조정계산서 추출 결과:`);
+      console.log(`   - 산출세액(calculatedTax): ${result.data.calculatedTax}`);
+      console.log(`   - 최저한세 적용대상(minTaxTarget): ${result.data.minTaxTarget}`);
+      console.log(`   - 차감세액(deductedTax): ${result.data.deductedTax}`);
+      console.log(`   - 가감계(totalAdjustment): ${result.data.totalAdjustment}`);
     }
 
 

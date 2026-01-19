@@ -9,6 +9,11 @@ export async function generateExcel(results) {
   const registryResults = results.filter(r => r.type === 'registry');
   const taxReturnResults = results.filter(r => r.type === 'taxReturn');
 
+  console.log(`[DEBUG_EXCEL] Results count: Total=${results.length}, Tax=${taxReturnResults.length}, Withholding=${withholdingResults.length}, Registry=${registryResults.length}`);
+  taxReturnResults.forEach((r, i) => {
+    console.log(`[DEBUG_EXCEL] TaxResult[${i}]: Year=${r.year}, TaxBase=${r.data?.taxBase}, CalculatedTax=${r.data?.calculatedTax}`);
+  });
+
   // 1.5 임원 필터링 (등기부 임원은 원천징수부에서 제외)
   // 임원 재직 기간 정보 구축
   const executiveTenures = [];
