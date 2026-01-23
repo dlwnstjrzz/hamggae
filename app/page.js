@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { Upload, FileText, CheckCircle, AlertCircle, Download, RefreshCw, Loader2, Trash2 } from 'lucide-react';
 import { processPDF, generateExcel } from '@/utils/pdfProcessor';
+import EmploymentIncreaseCalculator from '@/components/EmploymentIncreaseCalculator';
 import clsx from 'clsx';
 
 export default function Home() {
@@ -262,6 +263,8 @@ export default function Home() {
           </div>
         </div>
       </div>
+      
+      <EmploymentIncreaseCalculator />
     </main>
   );
 }
