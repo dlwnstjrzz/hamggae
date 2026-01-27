@@ -27,14 +27,29 @@ function calculateAnnualAverages(employeeData) {
         byYear[emp.year].totalNormalMonths += emp.normalMonths;
     });
 
-    // 2. Calculate Averages (Round to 2 decimal places usually, but effectively floor/ceil rules apply in tax? Standard is truncated 2 decimals or just 2 decimals)
-    // Providing raw 2 decimal fixed strings or numbers
+    // 2. Calculate Averages
+    // 사용자 요청: 소수점 3째자리 버림 (절사)
+    const truncateTo2Decimals = (num) => Math.floor(num * 100) / 100;
+
     const sortedYears = Object.keys(byYear).sort().map(Number);
     const annualStats = sortedYears.map(year => {
         const stat = byYear[year];
-        stat.youthCount = Number((stat.totalYouthMonths / 12).toFixed(2));
-        stat.overallCount = Number(((stat.totalYouthMonths + stat.totalNormalMonths) / 12).toFixed(2));
-        stat.normalCount = Number((stat.overallCount - stat.youthCount).toFixed(2)); // Consistency check
+        
+        // 전체 월수
+        const totalMonths = stat.totalYouthMonths + stat.totalNormalMonths;
+
+        // 1. 전체 상시근로자 수 = (전체 월수 / 12) 후 소수점 2자리 남기고 버림
+        stat.overallCount = truncateTo2Decimals(totalMonths / 12);
+
+        // 2. 청년 상시근로자 수 = (청년 월수 / 12) 후 소수점 2자리 남기고 버림
+        stat.youthCount = truncateTo2Decimals(stat.totalYouthMonths / 12);
+
+        // 3. 청년 외(기타) 상시근로자 수 = (청년 외 월수 / 12) 후 소수점 2자리 남기고 버림
+        // 사용자 요청: 전체 - 청년 방식이 아니라 직접 월수를 합해 계산
+        stat.normalCount = truncateTo2Decimals(stat.totalNormalMonths / 12);
+        
+        stat.totalMonths = totalMonths; // UI 표시용 추가
+
         return stat;
     });
 
@@ -158,7 +173,10 @@ function calculateCreditAmounts(annualStats, settings) {
                 credit1st,
                 credit2nd,
                 credit3rd,
-                totalCredit: credit1st + credit2nd + credit3rd
+                totalCredit: credit1st + credit2nd + credit3rd,
+                // Add rates for display
+                youthRate,
+                otherRate
             });
         }
     });

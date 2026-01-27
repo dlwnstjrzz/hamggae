@@ -151,8 +151,8 @@ function findValueFromFullText(words, keyword, debugName = keyword, targetIndex 
 
             if (i === targetIndex) {
                 let val = parseInt(valStr.replace(/,/g, ''), 10);
-                // 부호 처리 (△, -, − 이면 음수)
-                if (sign && (sign === '△' || sign === '-' || sign === '−')) {
+                // 부호 처리 (-, − 이면 음수, △는 무시하고 양수로 처리)
+                if (sign && (sign === '-' || sign === '−')) {
                     val = -val;
                 }
 
@@ -271,7 +271,8 @@ export async function processTaxReturnPDF(pdf, filename) {
               const valStr = m[1];
               // 부호 처리
               let sign = 1;
-              if (valStr.startsWith('△') || valStr.startsWith('-') || valStr.startsWith('−')) {
+              // 사용자 요청: △는 무시하고 양수로 처리
+              if (valStr.startsWith('-') || valStr.startsWith('−')) {
                  sign = -1;
               }
               const val = parseInt(valStr.replace(/[△\-−,]/g, ''), 10);
@@ -348,7 +349,7 @@ export async function processTaxReturnPDF(pdf, filename) {
       }
     }
 
-    // 3. 세액공제조정명세서 (Gemini AI 적용)
+    // 3. 세액공제조정명세서
     if (textNoSpace.includes('세액공제조정명세서')) {
        if (taxCreditStartPageIdx === -1) taxCreditStartPageIdx = i;
     }

@@ -100,23 +100,33 @@ function analyzeYouthStatus(name, id, hireDate, retireDate, row, salaryStartCol,
   let normalSalary = 0;
   let totalSalary = 0;
 
+  // New fields for Social Insurance
+  let socialInsuranceTotalSalary = 0;
+  let socialInsuranceYouthSalary = 0;
+  let socialInsuranceNormalSalary = 0;
+  let socialInsuranceExcludedSalary = 0;
+  let resignationExcludedMonth = null;
+
   // Birthday from ID
   // ID format: 123456-1****** or 1234561234567
   let birthDate = null;
   if (id && id.length >= 6) {
       const front = id.substring(0, 6); // YYMMDD
-      const back = id.includes('-') ? id.split('-')[1] : id.substring(6);
-      const genderDigit = back ? back.substring(0, 1) : null;
+      const yy = parseInt(front.substring(0, 2));
       
-      // 1,2: 1900s / 3,4: 2000s
-      let birthYearPrefix = '19';
-      if (genderDigit === '3' || genderDigit === '4') birthYearPrefix = '20';
-      
+      // 주민번호 뒷자리 무시 (사용자 요청)
+      // YY 기준: 00~29 -> 2000년대, 30~99 -> 1900년대
+      let birthYearPrefix = (yy < 30) ? '20' : '19';
+
       const y = parseInt(birthYearPrefix + front.substring(0, 2));
       const m = parseInt(front.substring(2, 4)) - 1; // 0-indexed
       const d = parseInt(front.substring(4, 6));
       birthDate = new Date(y, m, d);
   }
+
+  // Parse dates once if possible, but keep existing logic flow for consistency
+  const hDate = hireDate ? new Date(hireDate) : null;
+  const rDate = retireDate ? new Date(retireDate) : null;
 
   for (let m = 1; m <= 12; m++) {
       const monthEnd = new Date(year, m, 0); // Last day of month m
@@ -145,8 +155,6 @@ function analyzeYouthStatus(name, id, hireDate, retireDate, row, salaryStartCol,
 
       // Employment Status at Month End
       let isEmployedAtMonthEnd = false;
-      const hDate = hireDate ? new Date(hireDate) : null;
-      const rDate = retireDate ? new Date(retireDate) : null;
 
       if (hDate && hDate <= monthEnd) {
           if (!rDate || rDate >= monthEnd) {
@@ -163,6 +171,25 @@ function analyzeYouthStatus(name, id, hireDate, retireDate, row, salaryStartCol,
       if (salary > 0) {
           if (isYouth) youthSalary += salary;
           else normalSalary += salary;
+
+          // Social Insurance Logic: Exclude salary if it is the resignation month
+          // Rule: If an employee resigns in the middle of the month (e.g. 7/8), 
+          // that month (7) should be excluded from the social insurance salary calculation.
+          // Note: Income Tax Total Salary still includes this amount.
+          let isResignationMonth = false;
+          if (rDate && rDate.getFullYear() === year && rDate.getMonth() + 1 === m) {
+              isResignationMonth = true;
+          }
+
+          if (!isResignationMonth) {
+              if (isYouth) socialInsuranceYouthSalary += salary;
+              else socialInsuranceNormalSalary += salary;
+              socialInsuranceTotalSalary += salary;
+          } else {
+              // Track excluded salary for display
+              socialInsuranceExcludedSalary += salary;
+              resignationExcludedMonth = m; 
+          }
       }
   }
 
@@ -183,7 +210,12 @@ function analyzeYouthStatus(name, id, hireDate, retireDate, row, salaryStartCol,
       youthMonths,
       normalMonths,
       youthSalary,
-      normalSalary
+      normalSalary,
+      socialInsuranceTotalSalary,
+      socialInsuranceYouthSalary,
+      socialInsuranceNormalSalary,
+      socialInsuranceExcludedSalary,
+      resignationExcludedMonth
   };
 }
 
