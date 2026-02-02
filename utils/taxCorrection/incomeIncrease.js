@@ -10,236 +10,399 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
 
     const years = Object.keys(dataByYear).map(y => parseInt(y)).sort((a,b) => a - b);
     const results = [];
-    const annualStats = [];
-
+    
     // Helper: Calculate FTE (Full Time Equivalent) for a list of employees in a specific year
     // FTE = Sum of Working Months / 12
     const calculateStats = (employees, year) => {
         let totalWages = 0;
+        let totalAnnualizedWages = 0;
         let totalMonths = 0;
         let count = 0;
 
         employees.forEach(emp => {
-            // Check if employee works in this year
-            // The processedData is already split by year (each row is one year for one person)
-            // But 'employees' here might be the list of ALL data rows? 
-            // We should pass only the relevant rows.
             totalWages += emp.totalSalary;
-            // Calculate working months for this year
-            // We can use normalized 'socialInsuranceTotalSalary' logic or just employment period?
-            // User requirement: "Sangsi worker months".
-            // In EmploymentIncrease calc, usually (Employment Months / 12).
             const workingMonths = calculateWorkingMonths(emp, year);
             totalMonths += workingMonths;
             count++;
+
+            // User Requirement: Annualize wage for calculating average wage
+            // If worked 6 months (0.5 FTE), Annualized = Wage * 2
+            if (workingMonths > 0) {
+                totalAnnualizedWages += emp.totalSalary * (12 / workingMonths);
+            }
         });
 
         return {
             totalWages,
-            fte: totalMonths / 12,
+            totalAnnualizedWages,
+            fte: Math.floor((totalMonths / 12) * 100) / 100, // Truncate below 2nd decimal
             count
         };
     };
 
-    // Calculate Step 1: Overall Constant Employee Count for each year (for display and multiplier)
-    years.forEach(year => {
-        const employees = dataByYear[year] || [];
+    // Helper to compare employees handling masked IDs
+    const isSamePerson = (p1, p2) => {
+        if (!p1.name || !p2.name || p1.name !== p2.name) return false;
+        if (!p1.id || !p2.id) return false;
+        if (p1.id === p2.id) return true;
         
-        // Filter for Constant Employees (General Definition)
-        // Usually: Employed at month end? 
-        // The standard "Sangsi" definition allows fractional.
-        // But for "Income Increase" logic Step 1, it's just total count.
-        // We accumulate months.
-        let totalMonths = 0;
-        employees.forEach(e => {
-            // Assume 12 months for full year, or partial for hire/retire
-            // Using the pre-calculated 'normalMonths' + 'youthMonths' from parser?
-            // "youthMonths" + "normalMonths" = total employed months in that year
-             totalMonths += (e.youthMonths + e.normalMonths);
-        });
+        // Compare front 6 digits
+        const id1 = p1.id.replace(/-/g, '').substring(0, 6);
+        const id2 = p2.id.replace(/-/g, '').substring(0, 6);
+        return id1 === id2;
+    };
 
-        annualStats.push({
-            year,
-            fte: totalMonths / 12
-        });
-    });
+    // Helper to determine accurate exclusion status
+    const getExclusionStatus = (emp, targetYear) => {
+        // 1. Must be employed at Year End of Target Year
+        if (!isEmployedAtYearEnd(emp, targetYear)) {
+            return { isExcluded: true, reason: '연말 기준 미재직' };
+        }
+
+        const empId = emp.id;
+        if (!empId) return { isExcluded: true, reason: '식별 불가 (주민번호 미기재)' };
+
+        // 2. Check Resignation History FIRST (TargetYear-4 ~ TargetYear)
+        for (let y = targetYear; y >= targetYear - 4; y--) {
+            // Find ALL matching records (handle split rows or masked IDs)
+            const matchingRecords = (dataByYear[y] || []).filter(d => isSamePerson(d, emp));
+            
+            // Check for ANY resignation in this year
+            const resignedRecord = matchingRecords.find(d => {
+                if (d.retireDate) {
+                    const rDate = new Date(d.retireDate);
+                    return rDate.getFullYear() === y;
+                }
+                return false;
+            });
+
+            if (resignedRecord) {
+                 return { isExcluded: true, reason: `5년 내 퇴사 이력 존재 (${y}년 퇴사)` };
+            }
+        }
+
+        // 3. Check High Salary (Sum of all records in a year > 70m)
+        for (let y = targetYear; y >= targetYear - 4; y--) {
+            const matchingRecords = (dataByYear[y] || []).filter(d => isSamePerson(d, emp));
+            const yearTotalSalary = matchingRecords.reduce((sum, d) => sum + d.totalSalary, 0);
+
+            if (yearTotalSalary > 70000000) {
+                return { isExcluded: true, reason: `총급여 7천만원 초과 (${y}년: ${(yearTotalSalary/10000).toFixed(0)}만원)` };
+            }
+        }
+
+        return { isExcluded: false, reason: '' };
+    };
+
+    // Note: We do NOT calculate a global 'annualStats' anymore.
+    // We calculate stats dynamically for each Target Year context.
 
     // Main Loop: Calculate Credit for each year T
-    // We strictly need data from T-4 to T to calculate:
-    // 1. Exclusions (Lookback 5 years: T, T-1, T-2, T-3, T-4)
-    // 2. Growth Rates (Avg of 3 prior years: T-1, T-2, T-3 rates -> needs Wages from T-1 to T-4)
     years.forEach(targetYear => {
-        // Strict check: We need continuous data for at least 5 years ending in targetYear
-        if (!dataByYear[targetYear - 4]) return;
+        // Relaxed check: We need at least T-1 data to calculate current growth (Rate T).
+        // For past rates (T-1, T-2, T-3), if data is missing, we treat growth as 0% based on user preference to average over 3 years.
+        const hasFullHistory = (dataByYear[targetYear - 1] !== undefined);
 
-        // 1. Identify "Cohort" for Step 3 (Average Wage Calculation)
-        // Criteria:
-        //  a) Employed at end of Target Year
-        //  b) Not excluded (Salary > 70m) in [Target-4, Target]
-        //  c) Not excluded (Resigned) in [Target-4, Target] (implied by "continuous" but strict check needed)
-        
         const cohortEmployees = [];
-        const excludedList = []; // Track excluded employees
+        const excludedList = []; 
         const currentYearEmployees = dataByYear[targetYear] || [];
 
+        // 1. Define Cohort: The "Sangsi" workers of Target Year who survived the 5-year check
         currentYearEmployees.forEach(emp => {
-            // a) Employed at end of Target Year?
-            if (!isEmployedAtYearEnd(emp, targetYear)) return;
-
-            // Check history for exclusion
-            const empId = emp.id; 
-            if (!empId) return;
-
-            let isExcluded = false;
-            let exclusionReason = '';
-
-            // Check period: [TargetYear - 4, TargetYear]
-            for (let y = targetYear; y >= targetYear - 4; y--) {
-                const empDataInYear = (dataByYear[y] || []).find(d => d.id === empId);
-
-                if (empDataInYear) {
-                    // Check Salary
-                    if (empDataInYear.totalSalary > 70000000) {
-                        isExcluded = true;
-                        exclusionReason = `총급여 7천만원 초과 (${y}년: ${(empDataInYear.totalSalary/10000).toFixed(0)}만원)`;
-                        break;
-                    }
-                    // Check Resignation
-                    if (empDataInYear.retireDate) {
-                        const rDate = new Date(empDataInYear.retireDate);
-                        if (rDate.getFullYear() === y) {
-                             isExcluded = true;
-                             exclusionReason = `5년 내 퇴사 이력 존재 (${y}년 퇴사)`;
-                             break;
-                        }
-                    }
-                }
-            }
-
-            if (!isExcluded) {
+            const status = getExclusionStatus(emp, targetYear);
+            
+            if (!status.isExcluded) {
                 cohortEmployees.push(emp);
             } else {
-                excludedList.push({ name: emp.name, id: emp.id, reason: exclusionReason, year: targetYear });
+                excludedList.push({ name: emp.name, id: emp.id, reason: status.reason, year: targetYear });
             }
         });
 
-        // 2. Calculate Avg Wages and Growth Rates
-        // We need:
-        // AvgWage(T)
-        // AvgWage(T-1), Growth(T) = (Avg(T)-Avg(T-1))/Avg(T-1)
-        // AvgWage(T-2), Growth(T-1) = (Avg(T-1)-Avg(T-2))/Avg(T-2)
-        // AvgWage(T-3), Growth(T-2) = (Avg(T-2)-Avg(T-3))/Avg(T-3)
-        // AvgWage(T-4), Growth(T-3) = ... (Need 3 prior years rates -> Need T-4 wage)
-        
-        const yearlyAvgs = {};
-        
-        // We calculate averages for T, T-1, T-2, T-3, T-4
-        // checkYears = [T, T-1, T-2, T-3, T-4]
+        // 2. Calculate Avg Wages and FTE for THIS Cohort across T, T-1, T-2...
+        // The stats for T-1 must be based on THIS Cohort (filtered by T's exclusion rules).
+        const yearlyStats = {};
         const checkYears = [0, 1, 2, 3, 4].map(delta => targetYear - delta);
         
         checkYears.forEach(y => {
-            // Find the cohort's data for year y
             const empDataList = [];
+            // Find data for this cohort in year y
             cohortEmployees.forEach(c => {
-                 // Find matching data row
-                 const match = (dataByYear[y] || []).find(d => d.id === c.id);
-                 if (match) empDataList.push(match);
+                 // Use isSamePerson to find the historical record(s)
+                 const matches = (dataByYear[y] || []).filter(d => isSamePerson(d, c));
+                 empDataList.push(...matches);
             });
             
-            // Calculate Stats for this subset
-            // IMPORTANT: "Exclude New Hires in Each Year" Logic?
-            // "3. 각 과세연도별 입사자 제외시 평균임금 계산"
-            // This implies for Year Y Avg, we exclude anyone who joined in Year Y.
-            // So we filter empDataList: `hireDate` < Year Y start. (Joined before Y)
-            const validForAvg = empDataList.filter(e => {
-                const yearStart = new Date(e.year, 0, 1);
-                const hDate = new Date(e.hireDate);
-                return hDate < yearStart; // Joined before this year
+            // 1. Standard Wage (Includes everyone in cohort)
+            const validForWageStd = empDataList;
+
+            // 2. Excluded New Hires Wage (Excludes hires in year Y)
+            // Logic: HireDate < Y-01-01
+            const validForWageExcl = empDataList.filter(e => {
+                if (!e.hireDate) return false;
+                // String comparison for robustness against timezone
+                const yearStartStr = `${y}-01-01`;
+                return e.hireDate < yearStartStr;
             });
 
-            const stats = calculateStats(validForAvg, y);
-            yearlyAvgs[y] = stats.count > 0 ? (stats.totalWages / stats.fte) : 0;
-            // Also store counts for debug/display if needed
+            // Calculate Stats
+            const wageStatsStd = calculateStats(validForWageStd, y);
+            const wageStatsExcl = calculateStats(validForWageExcl, y);
+            const basicStats = calculateStats(empDataList, y); // For FTE (Always Standard for FTE?)
+            
+            // Determine wage source based on year (User Requirement)
+            // 2023 onwards: Use Actual Total Wages (No annualization)
+            // Up to 2022: Use Annualized Wages
+            const useActualWages = y >= 2023;
+            const getWageSum = (stats) => useActualWages ? stats.totalWages : stats.totalAnnualizedWages;
+
+            yearlyStats[y] = {
+                avgWage: (wageStatsStd.count > 0 && wageStatsStd.fte > 0) ? (getWageSum(wageStatsStd) / wageStatsStd.fte) : 0,
+                avgWageExcl: (wageStatsExcl.count > 0 && wageStatsExcl.fte > 0) ? (getWageSum(wageStatsExcl) / wageStatsExcl.fte) : 0,
+                fte: Math.floor(basicStats.fte * 100) / 100,
+                names: [...new Set(validForWageStd.map(e => e.name))].sort()
+            };
         });
 
         // 3. Calculate Rates
-        const getRate = (cur, prev) => {
-            if (!prev || prev === 0) return 0;
-            return (cur - prev) / prev;
+        // Formula: Growth Rate(Y) = (AvgWage(Y, Excl New Hires) - AvgWage(Y-1, Standard)) / AvgWage(Y-1, Standard)
+        const getRate = (curExcl, prevStd) => {
+            if (!prevStd || prevStd <= 0) return null; // Avoid division by zero
+            return (curExcl - prevStd) / prevStd;
         };
 
-        const rateT = getRate(yearlyAvgs[targetYear], yearlyAvgs[targetYear-1]);
-        const rateT_1 = getRate(yearlyAvgs[targetYear-1], yearlyAvgs[targetYear-2]);
-        const rateT_2 = getRate(yearlyAvgs[targetYear-2], yearlyAvgs[targetYear-3]);
-        const rateT_3 = getRate(yearlyAvgs[targetYear-3], yearlyAvgs[targetYear-4]);
+        // Standard Wages (for Denominators and Excess Calc)
+        const wageT = yearlyStats[targetYear]?.avgWage || 0;
+        const wageT_1 = yearlyStats[targetYear-1]?.avgWage || 0;
+        const wageT_2 = yearlyStats[targetYear-2]?.avgWage || 0;
+        const wageT_3 = yearlyStats[targetYear-3]?.avgWage || 0;
+        const wageT_4 = yearlyStats[targetYear-4]?.avgWage || 0;
 
-        // Prior 3 Years Average Rate
-        // If data is missing (e.g. only have T-1, T-2), what do?
-        // Usually avg of available?
-        // User says: "Average of prev 3 years rate".
-        // If T-4 is missing, we use (RateT_1 + RateT_2) / 2?
-        // Let's iterate available rates.
-        const prevRates = [];
-        // Only include if the denom year existed?
-        // We need to check if we had valid wages to calc rate.
-        if (yearlyAvgs[targetYear-2] > 0) prevRates.push(rateT_1); // T-1 vs T-2
-        if (yearlyAvgs[targetYear-3] > 0) prevRates.push(rateT_2); // T-2 vs T-3
-        if (yearlyAvgs[targetYear-4] > 0) prevRates.push(rateT_3); // T-3 vs T-4
+        // Excluded Wages (for Numerators)
+        const wageT_Excl = yearlyStats[targetYear]?.avgWageExcl || 0;
+        const wageT_1_Excl = yearlyStats[targetYear-1]?.avgWageExcl || 0;
+        const wageT_2_Excl = yearlyStats[targetYear-2]?.avgWageExcl || 0;
+        const wageT_3_Excl = yearlyStats[targetYear-3]?.avgWageExcl || 0;
 
-        const avgPrevRate = prevRates.length > 0 
-             ? prevRates.reduce((a,b) => a+b, 0) / prevRates.length 
-             : 0;
+        // Rates mixing Excl (Current) vs Std (Prev)
+        const rateT = getRate(wageT_Excl, wageT_1);       // T Growth = (T_Excl - T-1_Std) / T-1_Std
+        const rateT_1 = getRate(wageT_1_Excl, wageT_2);   // T-1 Growth = (T-1_Excl - T-2_Std) / T-2_Std
+        const rateT_2 = getRate(wageT_2_Excl, wageT_3);   // T-2 Growth
+        const rateT_3 = getRate(wageT_3_Excl, wageT_4);   // T-3 Growth
+
+        const ratesLast3Years = [];
+        // User Logic: Treat undefined/null rates as 0% and always divide by 3 (average over 3 years)
+        ratesLast3Years.push(rateT_1 !== null ? rateT_1 : 0);
+        ratesLast3Years.push(rateT_2 !== null ? rateT_2 : 0);
+        ratesLast3Years.push(rateT_3 !== null ? rateT_3 : 0);
+
+        // Inject rates into history for UI display
+        if (yearlyStats[targetYear]) yearlyStats[targetYear].growthRate = rateT;
+        if (yearlyStats[targetYear-1]) yearlyStats[targetYear-1].growthRate = rateT_1;
+        if (yearlyStats[targetYear-2]) yearlyStats[targetYear-2].growthRate = rateT_2;
+        if (yearlyStats[targetYear-3]) yearlyStats[targetYear-3].growthRate = rateT_3;
+
+        let avgRateLast3Years = 0;
+        if (ratesLast3Years.length > 0) {
+             avgRateLast3Years = ratesLast3Years.reduce((a,b) => a+b, 0) / ratesLast3Years.length;
+        }
 
         // 4. Calculate Credit
-        // Condition: RateT > AvgPrevRate
-        let creditAmount = 0;
         let excessAmount = 0;
-        const employeeCountPre = annualStats.find(a => a.year === targetYear - 1)?.fte || 0;
+        let creditAmount = 0;
+        let calculationMethod = 'general'; // 'general', 'special', 'sme'
+        const employeeCountPre = yearlyStats[targetYear-1]?.fte || 0;
+        const employeeCountCurr = yearlyStats[targetYear]?.fte || 0;
+
+        // Decision: General vs Special Provision (상호 배타적)
+        // General Rule requires: RateT-1 > 0 AND RateT-1 >= 30% of AvgRate3Yr
+        // Special Provision applies if: RateT-1 < 0 OR RateT-1 < 30% of AvgRate3Yr
         
-        if (rateT > avgPrevRate && avgPrevRate >= 0) { // Should we require positive growth? Text doesn't strictly say, but usually yes. Assuming standard.
-             const avgT = yearlyAvgs[targetYear];
-             const avgPrev = yearlyAvgs[targetYear-1];
+        let excessGeneral = 0;
+        let isGeneralApplicable = false;
+        let generalDesc = '';
+
+        let excessSpecial = 0;
+        let isSpecialApplicable = false;
+        let specialDesc = '';
+        
+        let useSpecialProvision = false;
+        
+        // Check triggers using RateT_1 (Previous Year Growth)
+        // Screenshot Step 7 Title references (28), which is RateT-1.
+        // Logic: If previous year growth was negative or very low (dip), we smooth T and T-1.
+        if (wageT_2 > 0 && rateT_1 !== null) {
+             const conditionNegative = rateT_1 < 0;
+             const conditionLowGrowth = (rateT_1 >= 0 && avgRateLast3Years > 0 && rateT_1 < 0.3 * avgRateLast3Years);
              
-             // Calculation: Excess Increase * Count
-             const wagesIfGrewAtAvgRate = avgPrev * (1 + avgPrevRate);
-             const diffPerPerson = avgT - wagesIfGrewAtAvgRate;
-             
-             if (diffPerPerson > 0) {
-                 excessAmount = diffPerPerson * employeeCountPre;
-                 // Tax Credit Rate: Small 20%, Medium 10%, Large 5%
-                 let creditRate = 0.05; // Default Large
-                 if (settings.size === 'small') creditRate = 0.2;
-                 else if (settings.size === 'middle') creditRate = 0.1;
-                 
-                 creditAmount = excessAmount * creditRate;
+             if (conditionNegative || conditionLowGrowth) {
+                 useSpecialProvision = true;
              }
         }
+
+        if (useSpecialProvision) {
+            // Method B: Special Provision (계산 특례)
+             if (hasFullHistory && wageT_2 > 0) {
+                // Step 33: Modified Avg Wage T = (WageT + WageT-1) / 2
+                const wageSpecT = (wageT + wageT_1) / 2;
+                
+                // Step 35: Modified Avg Rate = (RateT-2 + RateT-3) / 2
+                const r2 = rateT_2 !== null ? rateT_2 : 0;
+                const r3 = rateT_3 !== null ? rateT_3 : 0;
+                const avgRateSpecPrev = (r2 + r3) / 2;
+
+                // Step 36: Excess = (WageSpecT - WageT-2 * (1 + AvgRateSpecPrev)) * CountT-1
+                const wageIfGrewSpec = wageT_2 * (1 + avgRateSpecPrev);
+                const diffSpec = wageSpecT - wageIfGrewSpec;
+                const resultSpec = diffSpec * employeeCountPre;
+                
+                // Always generate description to show details even if result is zero/negative
+                specialDesc = `계산특례: { (당해[${wageT.toLocaleString(undefined, {maximumFractionDigits:0})}] + 직전[${wageT_1.toLocaleString(undefined, {maximumFractionDigits:0})}]) / 2 - 직전2년[${wageT_2.toLocaleString(undefined, {maximumFractionDigits:0})}] × (1 + 특례율[${(avgRateSpecPrev*100).toFixed(2)}%]) } × 직전인원[${employeeCountPre}] = ${resultSpec.toLocaleString(undefined, {maximumFractionDigits:0})}`;
+
+                if (diffSpec > 0) {
+                    excessSpecial = resultSpec;
+                }
+                isSpecialApplicable = true; // Marked as applicable because it was triggered
+             }
+        } else {
+             // Method A: General Calculation (일반적인 경우)
+             if (hasFullHistory && rateT !== null && rateT > avgRateLast3Years && avgRateLast3Years >= 0) {
+                 const wageIfGrew = wageT_1 * (1 + avgRateLast3Years);
+                 const diff = wageT - wageIfGrew;
+                 if (diff > 0) {
+                     excessGeneral = diff * employeeCountPre;
+                     isGeneralApplicable = true;
+                     generalDesc = `일반계산: (${wageT.toLocaleString(undefined, {maximumFractionDigits:0})} - ${wageT_1.toLocaleString(undefined, {maximumFractionDigits:0})} × (1 + ${(avgRateLast3Years*100).toFixed(2)}%)) × ${employeeCountPre}`;
+                 }
+             }
+        }
+
+        // Method C: SME Provision (중소기업 특례 - 연도별 상이)
+        // Trigger: SME, RateT > FixedRate, CountT >= CountT-1, RateT-1 >= 0
+        let excessSME = 0;
+        let isSMEApplicable = false;
+        let smeDesc = '';
         
-        // Fallback Logic from Image (Step 7 - Special Case)
-        // If RateT < 0 or RateT < AvgPrevRate?
-        // "7. If (29) is negative or ... special calculation"
-        // I won't implement special cases unless requested, but user prompt "Thus organized... apply 20%".
-        // I'll stick to the main request logic.
+        // Year-specific fixed rates provided by user
+        const smeFixedRates = {
+            2020: 0.038, // 3.8%
+            2021: 0.038, // 3.8%
+            2022: 0.030, // 3.0%
+            2023: 0.032, // 3.2%
+            2024: 0.032  // 3.2%
+        };
+        const yInt = parseInt(targetYear);
+        const fixedRate = smeFixedRates[yInt] || 0.03; // Default 3.0% if not mapped
+
+        // Generate SME Requirement Details for all years (Display purpose)
+        // Treat null/undefined as 0 (0.00%) as per user request to handle missing data or start of data.
+        const rT = (rateT !== null && rateT !== undefined) ? rateT : 0;
+        const rT1 = (rateT_1 !== null && rateT_1 !== undefined) ? rateT_1 : 0;
+        
+        const rateTPct = (rT * 100).toFixed(2);
+        const rateT1Pct = (rT1 * 100).toFixed(2);
+        const fixedRatePct = (fixedRate * 100).toFixed(1);
+        
+        const rateTRounded = parseFloat(rateTPct); 
+        const rateT1Rounded = parseFloat(rateT1Pct);
+        const fixedRateVal = parseFloat(fixedRatePct);
+        
+        // Also used for display later
+        const isCond1Met = rateTRounded > fixedRateVal;
+        const isCond2Met = employeeCountCurr >= employeeCountPre;
+        const isCond3Met = rateT1Rounded >= 0;
+
+        const smeRequirementsDesc = `[중소요건] ①증가율(${rateTPct}%) ${isCond1Met ? '>' : '≤'} ${fixedRatePct}%, ②인원(${employeeCountCurr}) ${isCond2Met ? '≥' : '<'} ${employeeCountPre}, ③직전증가율(${rateT1Pct}%) ${isCond3Met ? '≥' : '<'} 0`;
+
+        // Default to small if not specified or explicit 'small'
+        const isSmall = !settings.size || settings.size === 'small';
+
+        // Check strictly for Conditions (Calculation Amount is separate)
+        let isSMEConditionsMet = false;
+        let smeReason = [];
+
+        if (isSmall) {
+            isSMEConditionsMet = isCond1Met && isCond2Met && isCond3Met;
+            
+            if (!isSMEConditionsMet) {
+                if (!isCond1Met) smeReason.push(`증가율(${rateTPct}%)이 고시율(${fixedRatePct}%) 이하`);
+                if (!isCond2Met) smeReason.push(`상시근로자 수 감소`);
+                if (!isCond3Met) smeReason.push(`직전년도 임금증가율(${rateT1Pct}%) 음수`);
+            }
+
+            if (isSMEConditionsMet) {
+                // Step 37: Excess = (WageT - WageT-1 * (1 + FixedRate)) * CountT-1
+                // WageT and WageT-1 use Standard calculations (Step 15, 16) per Step 37 rules.
+                const wageIfGrewSME = wageT_1 * (1 + fixedRate);
+                const diffSME = wageT - wageIfGrewSME;
+                
+                if (diffSME > 0) {
+                    excessSME = diffSME * employeeCountPre;
+                    // isSMEApplicable was used for "calculated amount > 0" in previous logic, 
+                    // but usually 'applicable' means requirements met. 
+                    // We will separate them in the result object.
+                    isSMEApplicable = true; 
+                    smeDesc = `중소기업특례: (${wageT.toLocaleString(undefined, {maximumFractionDigits:0})} - ${wageT_1.toLocaleString(undefined, {maximumFractionDigits:0})} × (1 + ${(fixedRate*100).toFixed(1)}%)) × ${employeeCountPre}`;
+                }
+            }
+        } else {
+             smeReason.push('중소기업 아님');
+        }
+
+        // Determine Final Excess Amount (Max of applicable methods)
+        const validExcesses = [];
+        if (isGeneralApplicable) validExcesses.push({ val: excessGeneral, method: 'general', desc: generalDesc });
+        if (isSpecialApplicable) validExcesses.push({ val: excessSpecial, method: 'special', desc: specialDesc });
+        if (isSMEApplicable) validExcesses.push({ val: excessSME, method: 'sme', desc: smeDesc });
+        
+        let calcDetails = '';
+
+        if (validExcesses.length > 0) {
+            // Sort by value desc
+            validExcesses.sort((a,b) => b.val - a.val);
+            excessAmount = validExcesses[0].val;
+            calculationMethod = validExcesses[0].method;
+            calcDetails = validExcesses[0].desc;
+        }
+
+        if (excessAmount > 0) {
+            let creditRate = 0.05; 
+            if (settings.size === 'small') creditRate = 0.2;
+            else if (settings.size === 'middle') creditRate = 0.1;
+            
+            creditAmount = excessAmount * creditRate;
+        }
 
         results.push({
             year: targetYear,
-            cohortCount: cohortEmployees.length, // Employees in the filtered list
-            excludedEmployees: excludedList, // Pass the captured list
-            avgWageT: yearlyAvgs[targetYear],
-            avgWageT_1: yearlyAvgs[targetYear-1],
-            rateT: rateT,
-            prevRates: prevRates,
-            avgPrevRate: avgPrevRate,
+            cohortCount: cohortEmployees.length, 
+            excludedEmployees: excludedList, 
+            avgWageT: wageT,
+            avgWageT_1: wageT_1,
+            rateT: rateT !== null ? rateT : 0,
+            rates: { t1: rateT_1, t2: rateT_2, t3: rateT_3 },
+            prevRates: ratesLast3Years,
+            avgPrevRate: avgRateLast3Years,
             employeeCountPre: employeeCountPre,
+            employeeCountCurr: employeeCountCurr,
             excessAmount: excessAmount,
-            taxCredit: creditAmount
+            taxCredit: creditAmount,
+            smeExcessAmount: excessSME, // Specific request to see SME calc
+            smeDesc: smeDesc,
+            isSMEApplicable: isSMEApplicable, // This implies Amount > 0 and Conditions Met
+            smeConditionsMet: isSMEConditionsMet, // Conditions Met (Status)
+            smeReason: smeReason.join(', '), // Reasons for failure
+            isCreditCalculable: hasFullHistory,
+            history: yearlyStats, // Pass the detailed context-aware history
+            calcDetails: calcDetails, // Passed to UI
+            calculationMethod: calculationMethod, // 'general', 'special', 'sme'
+            smeRequirementsDesc: smeRequirementsDesc // Passed to UI
         });
 
     });
 
     return {
-        annualStats, // General Stats
-        results // Credit Calculations
+        annualStats: [], // Defer to context-aware logic, using empty array as placeholder if strictly needed by UI, or adapt UI
+        results 
     };
 }
 

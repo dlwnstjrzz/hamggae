@@ -190,8 +190,10 @@ function calculateCreditAmounts(annualStats, settings) {
                 diffOverall,
                 diffYouth,
                 
-                recognizedYouthIncrease,
-                recognizedNormalIncrease,
+                // Mapped for Frontend
+                youthIncrease: recognizedYouthIncrease,
+                normalIncrease: recognizedNormalIncrease,
+                targetIncrease: recognizedYouthIncrease + recognizedNormalIncrease,
                 
                 youthBurdenPerPerson: Math.floor(youthBurdenPerPerson),
                 normalBurdenPerPerson: Math.floor(normalBurdenPerPerson),
@@ -200,7 +202,7 @@ function calculateCreditAmounts(annualStats, settings) {
                 normalCredit,
                 support2ndYear,
                 
-                totalCredit: totalYearlyCredit + support2ndYear
+                estimatedCredit: totalYearlyCredit + support2ndYear
             });
         }
     }

@@ -215,7 +215,8 @@ function analyzeYouthStatus(name, id, hireDate, retireDate, row, salaryStartCol,
       socialInsuranceYouthSalary,
       socialInsuranceNormalSalary,
       socialInsuranceExcludedSalary,
-      resignationExcludedMonth
+      resignationExcludedMonth,
+      isYouth: youthMonths > 0 // Add this for frontend filtering/styling
   };
 }
 

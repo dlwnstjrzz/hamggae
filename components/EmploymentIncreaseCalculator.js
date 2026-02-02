@@ -27,6 +27,7 @@ export default function EmploymentIncreaseCalculator() {
   // Sorting & Filtering
   const [showYouthOnly, setShowYouthOnly] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: 'youthMonths', direction: 'desc' }); // 기본값: 청년개월 내림차순
+  const [expandedRow, setExpandedRow] = useState(null);
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
@@ -58,602 +59,494 @@ export default function EmploymentIncreaseCalculator() {
   };
 
   const handleCalculateCredit = () => {
-      if (processedData.length === 0) return;
-      const res = calculateEmploymentIncreaseCredit(processedData, settings);
-      setCreditResults(res);
+    if (processedData.length === 0) return;
+    setIsLoading(true);
+    
+    // Simulate async calculation
+    setTimeout(() => {
+        const results = calculateEmploymentIncreaseCredit(processedData, settings);
+        setCreditResults(results);
+        setIsLoading(false);
+    }, 500);
   };
 
   const handleCalculateSocialInsurance = () => {
     if (processedData.length === 0) return;
-    // Assuming 'isNewGrowth' might be false for now unless user specifies
-    const res = calculateSocialInsuranceClaims(processedData, { isNewGrowth: false }); 
-    setSocialInsuranceResults(res);
+    setIsLoading(true);
+    setTimeout(() => {
+        const results = calculateSocialInsuranceClaims(processedData); // No settings needed for now
+        setSocialInsuranceResults(results);
+        setIsLoading(false);
+    }, 500);
   };
 
   const handleCalculateIncomeIncrease = () => {
-      if (processedData.length === 0) return;
-      const res = calculateIncomeIncreaseCredit(processedData, settings);
-      setIncomeIncreaseResults(res);
+    if (processedData.length === 0) return;
+    setIsLoading(true);
+    setTimeout(() => {
+        const results = calculateIncomeIncreaseCredit(processedData, settings);
+        setIncomeIncreaseResults(results);
+        setIsLoading(false);
+    }, 500);
+  }
+
+  // Helper to format currency
+  const formatCurrency = (amount) => {
+    return amount.toLocaleString('ko-KR') + '원';
   };
 
   const handleSort = (key) => {
-      let direction = 'desc';
-      if (sortConfig.key === key && sortConfig.direction === 'desc') {
-          direction = 'asc';
-      }
-      setSortConfig({ key, direction });
+    setSortConfig(prev => ({
+        key,
+        direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc'
+    }));
   };
 
-  // Get unique years for tabs
-  const availableYears = [...new Set(processedData.map(d => d.year))].sort((a,b) => a - b);
-  
-  // Apply Filter & Sort
-  let filteredData = activeTab ? processedData.filter(d => d.year === activeTab) : [];
-  
-  if (showYouthOnly) {
-      filteredData = filteredData.filter(d => d.youthMonths > 0);
-  }
+  const getSortedData = (data) => {
+      let filtered = [...data];
+      if (showYouthOnly) {
+        filtered = filtered.filter(emp => emp.isYouth);
+      }
 
-  if (sortConfig.key) {
-      filteredData.sort((a, b) => {
+      return filtered.sort((a, b) => {
           if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'asc' ? -1 : 1;
           if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'asc' ? 1 : -1;
           return 0;
       });
+  };
+
+  // Render nothing if no data
+  if (processedData.length === 0 && !isLoading) {
+    return (
+      <div className="text-center py-12 border-2 border-dashed border-gray-300 rounded-lg">
+        <input 
+          type="file" 
+          accept=".xlsx, .xls"
+          onChange={handleFileUpload}
+          className="hidden" 
+          id="file-upload"
+        />
+        <label 
+          htmlFor="file-upload"
+          className="cursor-pointer inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+        >
+          엑셀 파일 업로드
+        </label>
+        <p className="mt-2 text-sm text-gray-500">
+          근로소득지급명세서 엑셀 파일을 업로드하세요.
+        </p>
+      </div>
+    );
   }
 
   return (
-    <div className="w-full space-y-8 mt-8">
-      {/* 1. File Upload & Base Settings */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">세액공제 분석 (고용증대 / 사회보험)</h2>
-              <p className="text-gray-500 mt-1">
-                '사원 통합표'를 업로드하여 고용증대 및 사회보험료 세액공제를 분석합니다.
-              </p>
+    <div className="space-y-6">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">세액공제 계산기</h2>
+          <p className="text-sm text-gray-500 mt-1">기업 설정 및 데이터 분석 결과</p>
+        </div>
+        
+        <div className="flex items-center gap-4">
+             {/* Settings Panel */}
+             <div className="flex gap-4 bg-gray-50 p-2 rounded-lg border border-gray-200">
+                <select 
+                    value={settings.region}
+                    onChange={(e) => setSettings({...settings, region: e.target.value})}
+                    className="block rounded-md border-gray-300 py-1.5 text-base focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                >
+                    <option value="capital">수도권</option>
+                    <option value="non-capital">수도권 외</option>
+                </select>
+                <select 
+                    value={settings.size}
+                    onChange={(e) => setSettings({...settings, size: e.target.value})}
+                    className="block rounded-md border-gray-300 py-1.5 text-base focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+                >
+                    <option value="small">중소기업</option>
+                    <option value="middle">중견기업</option>
+                    <option value="large">대기업</option>
+                </select>
             </div>
-            <div className="flex gap-3">
-                <label className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors cursor-pointer font-medium shadow-sm">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                    </svg>
-                    통합표 업로드
-                    <input type="file" accept=".xlsx" onChange={handleFileUpload} className="hidden" />
-                </label>
+            
+            <div className="flex gap-2">
+                 <button
+                    onClick={handleCalculateCredit}
+                    className={`px-4 py-2 rounded-md text-sm font-medium text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 ${creditResults ? 'bg-gray-400' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+                >
+                    고용증대 계산
+                </button>
+                 <button
+                    onClick={handleCalculateSocialInsurance}
+                    className={`px-4 py-2 rounded-md text-sm font-medium text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 ${socialInsuranceResults ? 'bg-gray-400' : 'bg-emerald-600 hover:bg-emerald-700'}`}
+                >
+                    사회보험료 계산
+                </button>
+                <button
+                    onClick={handleCalculateIncomeIncrease}
+                    className={`px-4 py-2 rounded-md text-sm font-medium text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 ${incomeIncreaseResults ? 'bg-gray-400' : 'bg-orange-600 hover:bg-orange-700'}`}
+                >
+                    근로소득증대 계산
+                </button>
             </div>
-          </div>
-
-          {/* Settings Panel */}
-          <div className="bg-slate-50 rounded-xl p-6 border border-slate-100 flex flex-wrap gap-8">
-              <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">기업 구분</label>
-                  <div className="flex gap-2">
-                      <button 
-                          onClick={() => setSettings({...settings, size: 'small'})}
-                          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${settings.size === 'small' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
-                      >
-                          중소기업
-                      </button>
-                      <button 
-                          onClick={() => setSettings({...settings, size: 'middle'})}
-                          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${settings.size === 'middle' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
-                      >
-                          중견기업
-                      </button>
-                      <button 
-                          onClick={() => setSettings({...settings, size: 'large'})}
-                          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${settings.size === 'large' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
-                      >
-                          대기업/일반
-                      </button>
-                  </div>
-              </div>
-              
-              <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">소재지</label>
-                  <div className="flex gap-2">
-                       <button 
-                          onClick={() => setSettings({...settings, region: 'capital'})}
-                          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${settings.region === 'capital' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
-                      >
-                          수도권 내
-                      </button>
-                      <button 
-                          onClick={() => setSettings({...settings, region: 'non-capital'})}
-                          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${settings.region === 'non-capital' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
-                      >
-                          수도권 외 (지방)
-                      </button>
-                  </div>
-              </div>
-
-              <div className="flex items-end gap-3 ml-auto">
-                   <button 
-                      onClick={handleCalculateCredit}
-                      disabled={processedData.length === 0}
-                      className={`px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm transition-all flex items-center gap-2 ${
-                        processedData.length > 0 
-                        ? 'bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow-md hover:-translate-y-0.5' 
-                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                      }`}
-                   >
-                       고용증대 계산
-                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"/></svg>
-                   </button>
-
-                   <button 
-                      onClick={handleCalculateSocialInsurance}
-                      disabled={processedData.length === 0}
-                      className={`px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm transition-all flex items-center gap-2 ${
-                        processedData.length > 0 
-                        ? 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md hover:-translate-y-0.5' 
-                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                      }`}
-                   >
-                       사회보험 계산
-                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"/></svg>
-                   </button>
-
-                   <button 
-                      onClick={handleCalculateIncomeIncrease}
-                      disabled={processedData.length === 0}
-                      className={`px-5 py-2.5 rounded-xl font-bold text-sm shadow-sm transition-all flex items-center gap-2 ${
-                        processedData.length > 0 
-                        ? 'bg-purple-600 text-white hover:bg-purple-700 hover:shadow-md hover:-translate-y-0.5' 
-                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                      }`}
-                   >
-                       근로소득 증대 계산
-                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"/></svg>
-                   </button>
-              </div>
-          </div>
+        </div>
       </div>
 
-       {/* 2. Employee Table (Intermediate) */}
-      {processedData.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-            <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-4">
-                    <h3 className="text-lg font-bold text-gray-800">1. 연도별 사원 현황 (원천징수 기반)</h3>
-                    <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors">
-                        <input 
-                            type="checkbox" 
-                            checked={showYouthOnly}
-                            onChange={(e) => setShowYouthOnly(e.target.checked)}
-                            className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
-                        />
-                        청년(만29세 이하)만 보기
-                    </label>
-                </div>
-                <div className="flex bg-gray-100 p-1 rounded-lg">
-                    {availableYears.map(year => (
-                        <button
-                            key={year}
-                            onClick={() => setActiveTab(year)}
-                            className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
-                                activeTab === year 
-                                ? 'bg-white text-gray-900 shadow-sm' 
-                                : 'text-gray-500 hover:text-gray-700'
-                            }`}
-                        >
-                            {year}년
-                        </button>
-                    ))}
-                </div>
+      {/* Tabs for Years */}
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+          {processedData.map(yData => yData.year)
+            .filter((value, index, self) => self.indexOf(value) === index) // Unique years
+            .sort((a,b) => b - a)
+            .map((year) => (
+            <button
+              key={year}
+              onClick={() => setActiveTab(year)}
+              className={`${
+                activeTab === year
+                  ? 'border-indigo-500 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+            >
+              {year}년 데이터 ({processedData.filter(d => d.year == year).length}명)
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {/* Current Year Data View */}
+      {activeTab && (
+        <div className="bg-white shadow overflow-hidden sm:rounded-lg border border-gray-200">
+           <div className="px-4 py-5 sm:px-6 flex justify-between items-center">
+            <h3 className="text-lg leading-6 font-medium text-gray-900">{activeTab}년도 근로자 목록</h3>
+            <div className="flex items-center gap-4">
+                 <div className="flex items-center gap-2">
+                     <label htmlFor="filter-youth" className="text-sm text-gray-700 font-medium">청년만 보기</label>
+                     <input 
+                        id="filter-youth"
+                        type="checkbox" 
+                        checked={showYouthOnly} 
+                        onChange={(e) => setShowYouthOnly(e.target.checked)}
+                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                    />
+                 </div>
             </div>
-            
-            <div className="overflow-x-auto max-h-96 custom-scrollbar">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-gray-50 text-gray-700 font-medium sticky top-0 z-10">
-                  <tr>
-                    <th className="px-4 py-3">No.</th>
-                    <th className="px-4 py-3 cursor-pointer hover:bg-gray-100" onClick={() => handleSort('name')}>성명 {sortConfig.key === 'name' && (sortConfig.direction === 'asc' ? '▲' : '▼')}</th>
-                    <th className="px-4 py-3">주민번호</th>
-                    <th className="px-4 py-3">입사일</th>
-                    <th className="px-4 py-3">퇴사일</th>
-                    <th className="px-4 py-3 text-right cursor-pointer hover:bg-gray-100" onClick={() => handleSort('ageYearEnd')}>나이(연말) {sortConfig.key === 'ageYearEnd' && (sortConfig.direction === 'asc' ? '▲' : '▼')}</th>
-                    <th className="px-4 py-3 text-right">총급여</th>
-                    
-                    {/* 정렬 기능이 들어간 청년 개월 헤더 */}
-                    <th 
-                        className="px-4 py-3 text-center bg-blue-50 text-blue-700 cursor-pointer hover:bg-blue-100 transition-colors group"
+          </div>
+          <div className="border-t border-gray-200 overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">이름</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">주민번호</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">입사일</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">퇴사일</th>
+                  <th 
+                        scope="col" 
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                        onClick={() => handleSort('totalSalary')}
+                    >
+                        총급여 {sortConfig.key === 'totalSalary' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
+                    </th>
+                  <th 
+                        scope="col" 
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                         onClick={() => handleSort('youthMonths')}
                     >
-                        <div className="flex items-center justify-center gap-1">
-                            청년 개월
-                            {sortConfig.key === 'youthMonths' ? (
-                                <span>{sortConfig.direction === 'asc' ? '▲' : '▼'}</span>
-                            ) : (
-                                <span className="opacity-0 group-hover:opacity-30">▼</span>
-                            )}
-                        </div>
+                        청년근무개월 {sortConfig.key === 'youthMonths' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
                     </th>
-                    
-                      <th className="px-4 py-3 text-right bg-blue-50 text-blue-700">청년 급여</th>
-                      <th className="px-4 py-3 text-center bg-gray-100">일반 개월</th>
-                      <th className="px-4 py-3 text-right bg-gray-100">일반 급여</th>
-                      
-                      {/* Social Insurance Columns */}
-                      <th className="px-4 py-3 text-right bg-indigo-50 text-indigo-700 border-l border-indigo-100">
-                          <div className="flex flex-col items-center">
-                              <span>사대보험 급여</span>
-                              <span className="text-[10px] font-normal opacity-70">(퇴사월 제외)</span>
-                          </div>
-                      </th>
-                      <th className="px-4 py-3 text-right bg-red-50 text-red-700">
-                          <div className="flex flex-col items-center">
-                              <span>차감 급여</span>
-                              <span className="text-[10px] font-normal opacity-70">(중도퇴사)</span>
-                          </div>
-                      </th>
+                   <th 
+                        scope="col" 
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                         onClick={() => handleSort('normalMonths')}
+                    >
+                      일반근무개월 {sortConfig.key === 'normalMonths' && (sortConfig.direction === 'asc' ? '▲' : '▼')}
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {getSortedData(processedData.filter(d => d.year == activeTab)).map((emp, idx) => (
+                  <tr key={idx} className={emp.isYouth ? "bg-indigo-50/30" : ""}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{emp.name}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{emp.id}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{emp.hireDate}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{emp.retireDate || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatCurrency(emp.totalSalary)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-indigo-600 font-bold">{emp.youthMonths}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{emp.normalMonths}</td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {filteredData.map((row, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 font-medium text-gray-900">{idx + 1}</td>
-                      <td className="px-4 py-3">{row.name}</td>
-                      <td className="px-4 py-3 text-gray-500">{row.id}</td>
-                      <td className="px-4 py-3 text-gray-500">{row.hireDate}</td>
-                      <td className="px-4 py-3 text-gray-500">{row.retireDate}</td>
-                      <td className="px-4 py-3 text-right">{row.ageYearEnd}세</td>
-                      <td className="px-4 py-3 text-right font-medium">{row.totalSalary.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-center bg-blue-50/50 text-blue-700 font-bold">{row.youthMonths}</td>
-                      <td className="px-4 py-3 text-right bg-blue-50/50 text-blue-700">{row.youthSalary.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-center bg-gray-50/50">{row.normalMonths}</td>
-                      <td className="px-4 py-3 text-right bg-gray-50/50">{row.normalSalary.toLocaleString()}</td>
-                      
-                      {/* Social Insurance Data */}
-                      <td className="px-4 py-3 text-right bg-indigo-50/50 text-indigo-700 font-medium border-l border-indigo-50">
-                          {row.socialInsuranceTotalSalary.toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-right bg-red-50/50 text-red-600 text-xs">
-                          {row.socialInsuranceExcludedSalary > 0 ? (
-                              <div className="flex flex-col items-end">
-                                  <span className="font-bold">-{row.socialInsuranceExcludedSalary.toLocaleString()}</span>
-                                  <span className="text-[10px] text-red-400">({row.resignationExcludedMonth}월분)</span>
-                              </div>
-                          ) : '-'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-        </div>
-      )}
-
-      {/* 3. Tax Credit Calculation Results - Employment Increase */}
-      {creditResults && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 animate-in fade-in slide-in-from-bottom-4">
-              <h3 className="text-lg font-bold text-gray-800 mb-6">2-A. 고용증대 세액공제 계산 결과</h3>
-              
-              {/* Annual Averages Table */}
-              <div className="mb-8">
-                  <h4 className="text-sm font-semibold text-gray-500 mb-3 px-1">① 연도별 상시근로자 수 (월 평균)</h4>
-                  <div className="overflow-hidden bg-white border border-gray-200 rounded-xl">
-                      <table className="w-full text-sm text-center">
-                          <thead className="bg-gray-50 text-gray-700">
-                              <tr>
-                                  <th className="px-6 py-3 border-r border-gray-200">연도</th>
-                                  <th className="px-6 py-3 bg-blue-50/50 text-blue-800">청년 등 상시근로자</th>
-                                  <th className="px-6 py-3">청년 외 상시근로자</th>
-                                  <th className="px-6 py-3 font-bold bg-gray-100 text-gray-900 border-l border-gray-200">전체 상시근로자</th>
-                              </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100">
-                              {creditResults.annualAverages.map((stat, idx) => (
-                                  <tr key={idx} className="hover:bg-gray-50">
-                                      <td className="px-6 py-3 font-medium text-gray-900 border-r border-gray-200">{stat.year}년</td>
-                                      <td className="px-6 py-3 bg-blue-50/30 text-blue-700">
-                                          <div className="flex flex-col items-center">
-                                              <span className="font-bold text-lg">{stat.youthCount}명</span>
-                                              <span className="text-xs text-blue-500">
-                                                  ({stat.totalYouthMonths}개월 ÷ 12)
-                                              </span>
-                                          </div>
-                                      </td>
-                                      <td className="px-6 py-3 text-gray-600">
-                                          <div className="flex flex-col items-center">
-                                              <span className="font-medium text-lg">{stat.normalCount}명</span>
-                                              <span className="text-xs text-gray-400">
-                                                  ({stat.totalNormalMonths}개월 ÷ 12)
-                                              </span>
-                                          </div>
-                                      </td>
-                                      <td className="px-6 py-3 font-bold bg-gray-50 border-l border-gray-200">
-                                          <div className="flex flex-col items-center">
-                                              <span className="text-lg">{stat.overallCount}명</span>
-                                              <span className="text-xs text-gray-500">
-                                                   ({stat.totalMonths}개월 ÷ 12)
-                                              </span>
-                                              <span className="text-[10px] text-gray-400 scale-90 origin-top">
-                                                  *소수점 2자리 미만 절사
-                                              </span>
-                                          </div>
-                                      </td>
-                                  </tr>
-                              ))}
-                          </tbody>
-                      </table>
-                  </div>
-              </div>
-
-               {/* Tax Credit Calculation Table */}
-               <div>
-                  <h4 className="text-sm font-semibold text-gray-500 mb-3 px-1">② 연도별 세액공제 산출 내역 (상세)</h4>
-                  <div className="overflow-hidden bg-white border border-gray-200 rounded-xl">
-                      <table className="w-full text-sm text-center">
-                          <thead className="bg-gray-50 text-gray-700">
-                              <tr>
-                                  <th className="px-3 py-3 border-r border-gray-200" rowSpan={2}>연도</th>
-                                  <th className="px-3 py-3 border-b border-gray-200 bg-blue-50/50 text-blue-800" colSpan={2}>청년 등 증가</th>
-                                  <th className="px-3 py-3 border-b border-gray-200 bg-gray-50 text-gray-800" colSpan={2}>청년 외 증가</th>
-                                  <th className="px-3 py-3 border-b border-gray-200" colSpan={3}>연차별 공제금액</th>
-                                  <th className="px-4 py-3 border-l border-b border-gray-200 bg-emerald-50 text-emerald-800" rowSpan={2}>최종 공제세액</th>
-                              </tr>
-                              <tr>
-                                  <th className="px-2 py-2 text-xs text-blue-700 bg-blue-50/30">인원(명)</th>
-                                  <th className="px-2 py-2 text-xs text-blue-700 bg-blue-50/30 border-r border-gray-200">공제금액<br/><span className="text-[10px] text-blue-400 font-normal">(인원 × 단가)</span></th>
-                                  
-                                  <th className="px-2 py-2 text-xs text-gray-600 bg-gray-50">인원(명)</th>
-                                  <th className="px-2 py-2 text-xs text-gray-600 bg-gray-50 border-r border-gray-200">공제금액<br/><span className="text-[10px] text-gray-400 font-normal">(인원 × 단가)</span></th>
-
-                                  <th className="px-2 py-2 text-xs text-gray-500">1차년도</th>
-                                  <th className="px-2 py-2 text-xs text-gray-500">2차년도</th>
-                                  <th className="px-2 py-2 text-xs text-gray-500">3차년도</th>
-                              </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100">
-                              {creditResults.results.map((res, idx) => {
-                                  // Calculate individual amounts for display
-                                  const youthAmount = res.youthIncreaseRecognized * res.youthRate * 10000;
-                                  const otherAmount = res.otherIncreaseRecognized * res.otherRate * 10000;
-
-                                  return (
-                                  <tr key={idx} className="hover:bg-gray-50">
-                                      <td className="px-3 py-3 border-r border-gray-200 font-medium text-gray-900">
-                                          {res.year}년
-                                      </td>
-                                      
-                                      {/* Youth */}
-                                      <td className="px-2 py-3 bg-blue-50/10 text-blue-700 font-medium">
-                                          {res.youthIncreaseRecognized > 0 ? '+' : ''}{res.youthIncreaseRecognized}
-                                      </td>
-                                      <td className="px-2 py-3 bg-blue-50/10 text-blue-700 text-xs border-r border-gray-100">
-                                          {youthAmount !== 0 ? (
-                                              <div className="flex flex-col items-center">
-                                                  <span>{youthAmount.toLocaleString()}</span>
-                                                  <span className="text-[10px] text-blue-400">
-                                                      ({res.youthRate.toLocaleString()}만)
-                                                  </span>
-                                              </div>
-                                          ) : '-'}
-                                      </td>
-
-                                      {/* Other */}
-                                      <td className="px-2 py-3 text-gray-600">
-                                           {res.otherIncreaseRecognized > 0 ? '+' : ''}{res.otherIncreaseRecognized}
-                                      </td>
-                                      <td className="px-2 py-3 text-gray-500 text-xs border-r border-gray-100">
-                                          {otherAmount !== 0 ? (
-                                              <div className="flex flex-col items-center">
-                                                  <span>{otherAmount.toLocaleString()}</span>
-                                                  <span className="text-[10px] text-gray-400">
-                                                      ({res.otherRate.toLocaleString()}만)
-                                                  </span>
-                                              </div>
-                                          ) : '-'}
-                                      </td>
-                                      
-                                      {/* Yearly credits */}
-                                      <td className="px-2 py-3 text-gray-700 text-right text-xs">
-                                          {res.credit1st.toLocaleString()}
-                                      </td>
-                                      <td className="px-2 py-3 text-gray-500 text-right text-xs">
-                                          {res.credit2nd.toLocaleString()}
-                                      </td>
-                                      <td className="px-2 py-3 text-gray-400 text-right text-xs">
-                                          {res.credit3rd.toLocaleString()}
-                                      </td>
-
-                                      <td className="px-4 py-3 font-bold bg-emerald-50/30 text-emerald-700 text-right border-l border-gray-200">
-                                          {res.totalCredit.toLocaleString()}
-                                      </td>
-                                  </tr>
-                                  );
-                              })}
-                              {creditResults.results.length === 0 && (
-                                  <tr>
-                                      <td colSpan={9} className="py-8 text-gray-400">계산 가능한 연도 구간이 없습니다.</td>
-                                  </tr>
-                              )}
-                          </tbody>
-                      </table>
-                  </div>
-                   <p className="text-xs text-gray-400 mt-2 text-right">* 청년 등 단가: {settings.region === 'capital' ? '1,100' : '1,200'}만원, 청년 외 단가: {settings.region === 'capital' ? '700' : '770'}만원 (중소기업 기준 예시)</p>
-              </div>
+                ))}
+              </tbody>
+            </table>
           </div>
+        </div>
       )}
 
-      {/* 4. Tax Credit Calculation Results - Social Insurance */}
-      {socialInsuranceResults && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 animate-in fade-in slide-in-from-bottom-4">
-            <h3 className="text-lg font-bold text-gray-800 mb-6">2-B. 사회보험료 세액공제 계산 결과</h3>
+      {/* RESULT SECTION: Employment Increase Credit */}
+      {creditResults && (
+        <div className="mt-8 bg-white shadow sm:rounded-lg border border-gray-200 p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                💰 고용증대 세액공제 결과
+                <span className="text-xs font-normal text-gray-500 px-2 py-1 bg-gray-100 rounded-md">
+                    {settings.region === 'capital' ? '수도권' : '비수도권'} / {settings.size === 'small' ? '중소기업' : (settings.size === 'middle' ? '중견기업' : '대기업')}
+                </span>
+            </h3>
 
-            {/* Annual Averages Table (Social Insurance Specific) */}
-             <div className="mb-8">
-                  <h4 className="text-sm font-semibold text-gray-500 mb-3 px-1">① 연도별 상시근로자 수 & 부담 사회보험료</h4>
-                  <div className="overflow-hidden bg-white border border-gray-200 rounded-xl">
-                      <table className="w-full text-sm text-center">
-                          <thead className="bg-gray-50 text-gray-700">
-                              <tr>
-                                  <th className="px-4 py-3 border-r border-gray-200" rowSpan={2}>연도</th>
-                                  <th className="px-4 py-3 bg-blue-50/50 text-blue-800 border-b border-gray-200" colSpan={2}>청년</th>
-                                  <th className="px-4 py-3 bg-gray-50 text-gray-800 border-b border-gray-200" colSpan={2}>청년 외</th>
-                                  <th className="px-4 py-3 font-bold bg-gray-100 text-gray-900 border-l border-b border-gray-200" rowSpan={2}>전체 인원</th>
-                              </tr>
-                              <tr>
-                                  <th className="px-2 py-2 text-xs bg-blue-50/30 text-blue-700">인원</th>
-                                  <th className="px-2 py-2 text-xs bg-blue-50/30 text-blue-700 border-r border-gray-200">총 사회보험 급여</th>
-                                  
-                                  <th className="px-2 py-2 text-xs bg-gray-50 text-gray-600">인원</th>
-                                  <th className="px-2 py-2 text-xs bg-gray-50 text-gray-600 border-r border-gray-200">총 사회보험 급여</th>
-                              </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100">
-                              {socialInsuranceResults.annualStats.map((stat, idx) => (
-                                  <tr key={idx} className="hover:bg-gray-50">
-                                      <td className="px-4 py-3 font-medium text-gray-900 border-r border-gray-200">{stat.year}년</td>
-                                      
-                                      <td className="px-4 py-3 bg-blue-50/30 text-blue-700 font-medium">
-                                          {stat.youthCount}명
-                                      </td>
-                                      <td className="px-4 py-3 bg-blue-50/30 text-blue-700 text-xs text-right border-r border-gray-100">
-                                          {stat.siYouthSalary.toLocaleString()}원
-                                      </td>
-
-                                      <td className="px-4 py-3 text-gray-600 font-medium">
-                                          {stat.normalCount}명
-                                      </td>
-                                      <td className="px-4 py-3 text-gray-600 text-xs text-right border-r border-gray-200">
-                                          {stat.siNormalSalary.toLocaleString()}원
-                                      </td>
-
-                                      <td className="px-4 py-3 font-bold bg-gray-50 border-l border-gray-200">
-                                          {stat.overallCount}명
-                                      </td>
-                                  </tr>
-                              ))}
-                          </tbody>
-                      </table>
-                  </div>
+            <div className="overflow-x-auto">
+                <table className="min-w-full text-sm text-left text-gray-500">
+                    <thead className="bg-gray-50 text-gray-700 uppercase">
+                        <tr>
+                            <th className="px-4 py-3 border-b">연도</th>
+                            <th className="px-4 py-3 border-b text-indigo-700">청년 등 상시근로자</th>
+                            <th className="px-4 py-3 border-b text-gray-700">청년 외 상시근로자</th>
+                            <th className="px-4 py-3 border-b text-gray-900 font-bold">전체 상시근로자</th>
+                            <th className="px-4 py-3 border-b text-right">공제세액</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                        {creditResults.annualAverages.map((stat, idx) => (
+                            <tr key={idx} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 font-medium text-gray-900">{stat.year}년</td>
+                                <td className="px-4 py-3 text-indigo-600 font-medium">
+                                    {stat.youthCount.toFixed(2)}명 
+                                    <span className="text-xs text-gray-400 ml-1">
+                                        ({idx < creditResults.annualAverages.length - 1 ? (stat.youthCount - creditResults.annualAverages[idx+1].youthCount).toFixed(2) : '-'})
+                                    </span>
+                                </td>
+                                <td className="px-4 py-3">
+                                    {stat.normalCount.toFixed(2)}명
+                                     <span className="text-xs text-gray-400 ml-1">
+                                        ({idx < creditResults.annualAverages.length - 1 ? (stat.normalCount - creditResults.annualAverages[idx+1].normalCount).toFixed(2) : '-'})
+                                    </span>
+                                </td>
+                                <td className="px-4 py-3 font-bold text-gray-900">
+                                    {stat.overallCount.toFixed(2)}명
+                                     <span className={`text-xs ml-1 ${ (idx < creditResults.annualAverages.length - 1 && (stat.overallCount - creditResults.annualAverages[idx+1].overallCount) >= 0) ? 'text-red-500' : 'text-blue-500'}`}>
+                                        ({idx < creditResults.annualAverages.length - 1 ? (stat.overallCount - creditResults.annualAverages[idx+1].overallCount).toFixed(2) : '-'})
+                                    </span>
+                                </td>
+                                <td className="px-4 py-3 text-right font-bold text-indigo-600">
+                                    {creditResults.results.find(r => r.year === stat.year) ? formatCurrency(creditResults.results.find(r => r.year === stat.year).totalCredit) : '-'}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             </div>
-
-            {/* Final Calculation Table */}
-            <div>
-                  <h4 className="text-sm font-semibold text-gray-500 mb-3 px-1">② 연도별 공제세액 산출 내역</h4>
-                  <div className="overflow-hidden bg-white border border-gray-200 rounded-xl">
-                      <table className="w-full text-sm text-center">
-                          <thead className="bg-gray-50 text-gray-700">
-                              <tr>
-                                  <th className="px-3 py-3 border-r border-gray-200" rowSpan={2}>연도</th>
-                                  <th className="px-3 py-3 border-b border-gray-200 bg-blue-50/50 text-blue-800" colSpan={3}>청년 등 증가분</th>
-                                  <th className="px-3 py-3 border-b border-gray-200 bg-gray-50 text-gray-800" colSpan={3}>청년 외 증가분</th>
-                                  <th className="px-3 py-3 border-b border-gray-200" colSpan={2}>추가 공제</th>
-                                  <th className="px-4 py-3 border-l border-b border-gray-200 bg-emerald-50 text-emerald-800" rowSpan={2}>최종 공제세액</th>
-                              </tr>
-                              <tr>
-                                  {/* Youth */}
-                                  <th className="px-2 py-2 text-xs text-blue-700 bg-blue-50/30">증가인원</th>
-                                  <th className="px-2 py-2 text-xs text-blue-700 bg-blue-50/30">1인 부담액</th>
-                                  <th className="px-2 py-2 text-xs text-blue-700 bg-blue-50/30 border-r border-gray-200">공제액</th>
-                                  
-                                  {/* Others */}
-                                  <th className="px-2 py-2 text-xs text-gray-600 bg-gray-50">증가인원</th>
-                                  <th className="px-2 py-2 text-xs text-gray-600 bg-gray-50">1인 부담액</th>
-                                  <th className="px-2 py-2 text-xs text-gray-600 bg-gray-50 border-r border-gray-200">공제액</th>
-
-                                  {/* 2nd Year */}
-                                  <th className="px-2 py-2 text-xs text-gray-500">2차년도</th>
-                                  <th className="px-2 py-2 text-xs text-gray-500 border-r border-gray-200">-</th>
-                              </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100">
-                              {socialInsuranceResults.results.map((res, idx) => (
-                                  <tr key={idx} className="hover:bg-gray-50">
-                                      <td className="px-3 py-3 border-r border-gray-200 font-medium text-gray-900">
-                                          {res.year}년
-                                      </td>
-                                      
-                                      {/* Youth */}
-                                      <td className="px-2 py-3 bg-blue-50/10 text-blue-700 font-medium">
-                                          {res.recognizedYouthIncrease > 0 ? '+' : ''}{res.recognizedYouthIncrease}
-                                      </td>
-                                      <td className="px-2 py-3 bg-blue-50/10 text-blue-700 text-xs">
-                                          {res.youthBurdenPerPerson.toLocaleString()}
-                                      </td>
-                                      <td className="px-2 py-3 bg-blue-50/10 text-blue-700 font-medium text-right border-r border-gray-100">
-                                          {res.youthCredit.toLocaleString()}
-                                      </td>
-
-                                      {/* Other */}
-                                      <td className="px-2 py-3 text-gray-600">
-                                           {res.recognizedNormalIncrease > 0 ? '+' : ''}{res.recognizedNormalIncrease}
-                                      </td>
-                                      <td className="px-2 py-3 text-gray-600 text-xs">
-                                          {res.normalBurdenPerPerson.toLocaleString()}
-                                      </td>
-                                      <td className="px-2 py-3 text-gray-600 font-medium text-right border-r border-gray-100">
-                                          {res.normalCredit.toLocaleString()}
-                                      </td>
-                                      
-                                      {/* 2nd Year */}
-                                      <td className="px-2 py-3 text-gray-500 text-right text-xs">
-                                          {res.support2ndYear.toLocaleString()}
-                                      </td>
-                                      <td className="px-2 py-3 text-gray-400 text-center">-</td>
-
-                                      <td className="px-4 py-3 font-bold bg-emerald-50/30 text-emerald-700 text-right border-l border-gray-200">
-                                          {res.totalCredit.toLocaleString()}
-                                      </td>
-                                  </tr>
-                              ))}
-                              {socialInsuranceResults.results.length === 0 && (
-                                  <tr>
-                                      <td colSpan={10} className="py-8 text-gray-400">공제 가능한 연도가 없습니다.</td>
-                                  </tr>
-                              )}
-                          </tbody>
-                      </table>
-                  </div>
-                  <p className="text-xs text-gray-400 mt-2 text-right">* 청년 외 공제율: 50% (신성장 75%). 2차년도는 상시근로자 수 유지 시 1차년도 공제액 추가 지원.</p>
+            
+            {/* Detailed Calculation Logs (Optional/Expandable could be added here) */}
+             <div className="mt-4 bg-gray-50 p-4 rounded-md text-xs text-gray-500 space-y-1">
+                <p className="font-semibold mb-2">💡 계산 참고사항 (2025 개정 반영)</p>
+                <p>• 청년 등 상시근로자: 15세 ~ 29세 (군복무기간 가산 시 최대 35세), 장애인, 60세 이상 등 포함.</p>
+                <p>• 수도권 밖 중소기업 청년 공제액: 1인당 1,550만원 (2018~2020: 1,100~1,200만원)</p>
+                <p>• 전체 상시근로자 수가 감소하지 않은 경우에만 공제 가능 (사후관리 요건 미반영 단순 산출)</p>
             </div>
         </div>
       )}
 
-      {/* 5. Tax Credit Calculation Results - Income Increase */}
-      {incomeIncreaseResults && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 animate-in fade-in slide-in-from-bottom-4">
-            <h3 className="text-lg font-bold text-gray-800 mb-6">2-C. 근로소득 증대 세액공제 계산 결과</h3>
-            
-            <div className="overflow-hidden bg-white border border-gray-200 rounded-xl">
-               <table className="w-full text-sm text-center">
-                   <thead className="bg-gray-50 text-gray-700">
-                       <tr>
-                           <th className="px-4 py-3 border-r border-gray-200">연도</th>
-                           <th className="px-4 py-3 text-right">직전년도 상시수<br/><span className="text-[10px] font-normal text-gray-500">(공제대상 인원)</span></th>
-                           <th className="px-4 py-3 text-right">해당연도 평균임금<br/><span className="text-[10px] font-normal text-gray-500">(퇴사자 등 제외)</span></th>
-                           <th className="px-4 py-3 text-right">전년도 평균임금</th>
-                           <th className="px-4 py-3 text-right text-blue-700">임금증가율</th>
-                           <th className="px-4 py-3 text-right text-gray-500">직전 3년 평균율</th>
-                           <th className="px-4 py-3 text-right bg-emerald-50 text-emerald-800 font-bold">공제세액<br/><span className="text-[10px] font-normal opacity-70">(초과증가분 × 공제율)</span></th>
-                       </tr>
-                   </thead>
-                   <tbody className="divide-y divide-gray-100">
-                       {incomeIncreaseResults.results.map((res, idx) => (
-                           <tr key={idx} className="hover:bg-gray-50">
-                                <td className="px-4 py-3 font-medium text-gray-900 border-r border-gray-200">{res.year}년</td>
-                                <td className="px-4 py-3 text-right">{res.employeeCountPre.toFixed(2)}명</td>
-                                <td className="px-4 py-3 text-right">{res.avgWageT.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
-                                <td className="px-4 py-3 text-right text-gray-600">{res.avgWageT_1.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
-                                <td className="px-4 py-3 text-right font-medium text-blue-600">{(res.rateT * 100).toFixed(2)}%</td>
-                                <td className="px-4 py-3 text-right text-gray-500 uppercase">{(res.avgPrevRate * 100).toFixed(2)}%</td>
-                                <td className="px-4 py-3 text-right bg-emerald-50/50 text-emerald-700 font-bold">
-                                    <div className="flex flex-col items-end">
-                                        <span>{res.taxCredit.toLocaleString(undefined, {maximumFractionDigits:0})}</span>
-                                        {res.excessAmount > 0 && <span className="text-[10px] text-emerald-500 opacity-80">(초과분: {res.excessAmount.toLocaleString(undefined, {maximumFractionDigits:0})})</span>}
-                                    </div>
+      {/* RESULT SECTION: Social Insurance Credit */}
+      {socialInsuranceResults && (
+        <div className="mt-8 bg-white shadow sm:rounded-lg border border-gray-200 p-6 border-l-4 border-l-emerald-500">
+             <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                🛡️ 사회보험료 세액공제 결과
+                <span className="text-xs font-normal text-gray-400 px-2 py-1 bg-gray-100 rounded-md">중소기업 특별세액감면 등 중복 불가 유의</span>
+            </h3>
+
+             <div className="overflow-x-auto">
+                <table className="min-w-full text-sm text-left text-gray-500">
+                    <thead className="bg-emerald-50 text-emerald-800 uppercase">
+                        <tr>
+                            <th className="px-4 py-3 border-b">연도</th>
+                            <th className="px-4 py-3 border-b">청년 순증</th>
+                            <th className="px-4 py-3 border-b">청년 외 순증</th>
+                            <th className="px-4 py-3 border-b font-bold">공제 대상 인원</th>
+                            <th className="px-4 py-3 border-b text-right">예상 공제세액 (50~100%)</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                         {socialInsuranceResults.results.map((res, idx) => (
+                             <tr key={idx} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 font-medium text-gray-900">{res.year}년</td>
+                                <td className="px-4 py-3">{res.youthIncrease.toFixed(2)}명</td>
+                                <td className="px-4 py-3">{res.normalIncrease.toFixed(2)}명</td>
+                                <td className="px-4 py-3 font-bold text-emerald-700">{res.targetIncrease.toFixed(2)}명</td>
+                                <td className="px-4 py-3 text-right font-bold underline decoration-emerald-300 decoration-2 underline-offset-2">
+                                    {formatCurrency(res.estimatedCredit)}
                                 </td>
-                           </tr>
-                       ))}
+                             </tr>
+                         ))}
+                    </tbody>
+                </table>
+            </div>
+             <p className="text-xs text-gray-400 mt-2 text-right">* 공제율: 청년 100%, 청년 외 50% (신성장 서비스업 등 요건에 따라 다를 수 있음)</p>
+        </div>
+      )}
+
+      {/* RESULT SECTION: Income Increase Credit */}
+      {incomeIncreaseResults && (
+         <div className="mt-8 bg-white shadow sm:rounded-lg border border-gray-200 p-6 border-l-4 border-l-orange-500">
+            <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                📈 근로소득증대 세액공제 결과
+                 <span className="text-xs font-normal text-gray-500 px-2 py-1 bg-gray-100 rounded-md">
+                    {settings.size === 'small' ? '공제율 20%' : (settings.size === 'middle' ? '공제율 10%' : '공제율 5%')}
+                </span>
+            </h3>
+
+            <div className="overflow-x-auto">
+                <table className="min-w-full text-sm text-center text-gray-600">
+                    <thead className="bg-orange-50 text-orange-800 text-xs uppercase">
+                         <tr>
+                            <th rowSpan="2" className="px-4 py-3 border-r border-orange-200 align-middle">연도</th>
+                            <th colSpan="2" className="px-4 py-2 border-b border-orange-200 bg-orange-100/50">직전 5년 무사고(퇴사X,고액X) 인원</th>
+                            <th colSpan="2" className="px-4 py-2 border-b border-orange-200">평균임금(원)</th>
+                            <th colSpan="5" className="px-4 py-2 border-b border-orange-200 bg-orange-100/50">임금증가율(%)</th>
+                            <th className="px-4 py-3 text-right bg-emerald-50 text-emerald-800 font-bold text-xs">공제세액<br/><span className="text-[10px] font-normal opacity-70">(초과분 × 공제율)</span></th>
+                        </tr>
+                        <tr>
+                            <th className="px-2 py-1 text-xs border-r border-orange-100 bg-orange-50">당해</th>
+                            <th className="px-2 py-1 text-xs border-r border-orange-100 bg-orange-50">직전</th>
+                            <th className="px-2 py-1 text-xs border-r border-orange-100">당해(T)</th>
+                            <th className="px-2 py-1 text-xs border-r border-orange-100">직전(T-1)</th>
+                            <th className="px-2 py-1 text-xs bg-orange-50 font-bold text-blue-600">당해(T)</th>
+                            <th className="px-2 py-1 text-xs bg-orange-50">T-1</th>
+                            <th className="px-2 py-1 text-xs bg-orange-50">T-2</th>
+                            <th className="px-2 py-1 text-xs bg-orange-50">T-3</th>
+                            <th className="px-2 py-1 text-xs bg-orange-50 font-bold border-l border-orange-200">3년평균</th>
+                            <th className="px-4 py-3 text-right bg-emerald-50 text-emerald-800 font-bold text-xs">공제세액<br/><span className="text-[10px] font-normal opacity-70">(초과분 × 공제율)</span></th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                        {incomeIncreaseResults.results.map((res, idx) => (
+                            <React.Fragment key={idx}>
+                                <tr className="hover:bg-gray-50 cursor-pointer transition-colors border-b border-gray-100" onClick={() => setExpandedRow(expandedRow === idx ? null : idx)}>
+                                    <td className="px-4 py-3 font-medium text-gray-900 border-r border-gray-200">
+                                        <div className="flex items-center gap-2">
+                                            <svg className={`w-4 h-4 text-gray-400 transform transition-transform ${expandedRow === idx ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                            </svg>
+                                            {res.year}년
+                                        </div>
+                                    </td>
+                                    <td className="px-4 py-3 text-right font-medium text-blue-800 bg-blue-50/20 border-r border-blue-100">{res.employeeCountCurr.toFixed(2)}명</td>
+                                    <td className="px-4 py-3 text-right border-r border-gray-100">{res.employeeCountPre.toFixed(2)}명</td>
+                                    <td className="px-4 py-3 text-right">{res.avgWageT.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                                    <td className="px-4 py-3 text-right text-gray-600">{res.avgWageT_1.toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+                                    <td className="px-2 py-3 text-right font-medium text-blue-600">{(res.rateT * 100).toFixed(2)}%</td>
+                                    <td className="px-2 py-3 text-right text-gray-500">{res.rates && res.rates.t1 !== null ? (res.rates.t1 * 100).toFixed(2)+'%' : '-'}</td>
+                                    <td className="px-2 py-3 text-right text-gray-400">{res.rates && res.rates.t2 !== null ? (res.rates.t2 * 100).toFixed(2)+'%' : '-'}</td>
+                                    <td className="px-2 py-3 text-right text-gray-400">{res.rates && res.rates.t3 !== null ? (res.rates.t3 * 100).toFixed(2)+'%' : '-'}</td>
+                                    <td className="px-2 py-3 text-right font-bold border-l border-gray-200">
+                                        <span className="text-gray-900">{(res.avgPrevRate * 100).toFixed(2)}%</span>
+                                    </td>
+                                    <td className="px-4 py-3 text-right bg-emerald-50/50 text-emerald-700 font-bold">
+                                        <div className="flex flex-col items-end">
+                                            <span>{res.taxCredit.toLocaleString(undefined, {maximumFractionDigits:0})}</span>
+                                            {res.excessAmount > 0 && (
+                                                <>
+                                                    <span className="text-[10px] text-emerald-600 opacity-80 mt-1">
+                                                        (초과분: {res.excessAmount.toLocaleString(undefined, {maximumFractionDigits:0})})
+                                                    </span>
+                                                    <div className="text-[9px] text-gray-400 font-normal mt-0.5 text-right leading-tight">
+                                                        {res.employeeCountPre.toFixed(2)}명 × ({res.avgWageT.toLocaleString(undefined, {maximumFractionDigits:0})} - {res.avgWageT_1.toLocaleString(undefined, {maximumFractionDigits:0})}×{(1+res.avgPrevRate).toFixed(3)})
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {expandedRow === idx && res.history && (
+                                    <tr className="bg-gray-50/50">
+                                        <td colSpan={11} className="px-4 py-4 border-b border-gray-100">
+                                            <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                                                <h4 className="text-xs font-bold text-gray-700 mb-3 flex items-center gap-2">
+                                                    <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px]">{res.year}년 판단 기준</span>
+                                                    코호트 과거 이력 데이터
+                                                </h4>
+                                                {res.calcDetails && (
+                                                    <div className="mb-3 p-3 bg-gray-50 rounded border border-gray-200 text-xs text-gray-600 font-mono break-all leading-relaxed">
+                                                        <span className="font-bold text-gray-800 block mb-1">🧮 산출식 ({res.excessAmount > 0 ? '공제대상' : '미대상'})</span> 
+                                                        {res.calcDetails}
+                                                        {res.calculationMethod !== 'sme' && ((res.smeExcessAmount && res.smeExcessAmount > 0) || (res.smeDesc && res.smeDesc.length > 0)) && (
+                                                            <div className="mt-2 pt-2 border-t border-gray-200">
+                                                                <div className="flex items-center gap-2 mb-1">
+                                                                    <span className="badge bg-gray-100 text-gray-600 px-1 rounded text-[10px] border border-gray-300">비교</span>
+                                                                    <span className="font-bold text-gray-700">중소기업특례 적용 시</span>
+                                                                </div>
+                                                                
+                                                                <div className="pl-1 border-l-2 border-gray-300">
+                                                                    {res.smeDesc}
+                                                                    <div className="mt-0.5 font-bold text-gray-800">
+                                                                        = {res.smeExcessAmount ? res.smeExcessAmount.toLocaleString() : 0}원
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                        <div className="mt-2 text-gray-400 border-t border-dashed border-gray-200 pt-1">
+                                                            * (당해 표준평균임금 - 직전 표준평균임금 × (1 + 증가율)) × 상시인원
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {res.smeRequirementsDesc && (
+                                                    <div className={`mb-3 p-2 rounded border text-[11px] font-mono tracking-tight flex flex-col gap-1 ${res.smeConditionsMet ? 'bg-blue-50 border-blue-100 text-blue-800' : 'bg-gray-50 border-gray-200 text-gray-500'}`}>
+                                                        <div className="flex items-center gap-2">
+                                                             <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${res.smeConditionsMet ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-600'}`}>
+                                                                {res.smeConditionsMet ? '중소특례 요건 충족' : '중소특례 요건 미충족'}
+                                                             </span>
+                                                        </div>
+                                                        {!res.smeConditionsMet && res.smeReason && (
+                                                            <div className="text-red-500 text-[10px] font-bold">
+                                                                * 사유: {res.smeReason}
+                                                            </div>
+                                                        )}
+                                                        {res.smeRequirementsDesc}
+                                                    </div>
+                                                )}
+                                                <div className="flex gap-4 overflow-x-auto pb-2">
+                                                    {Object.entries(res.history).sort((a,b) => b[0] - a[0]).map(([year, stat]) => (
+                                                        <div key={year} className={`flex-1 min-w-[120px] rounded p-3 border ${parseInt(year) === res.year || parseInt(year) === res.year - 1 ? 'bg-blue-50 border-blue-100 ring-1 ring-blue-200' : 'bg-gray-50 border-gray-100'}`}>
+                                                            <div className="flex justify-between items-center mb-2">
+                                                                <div className={`text-sm font-bold ${parseInt(year) === res.year ? 'text-blue-700' : 'text-gray-600'}`}>{year}년</div>
+                                                                {parseInt(year) === res.year && <span className="text-[10px] bg-blue-200 text-blue-800 px-1.5 rounded">당해</span>}
+                                                                {parseInt(year) === res.year - 1 && <span className="text-[10px] bg-gray-200 text-gray-600 px-1.5 rounded">직전</span>}
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <div className="flex justify-between text-xs">
+                                                                    <span className="text-gray-500">평균임금</span>
+                                                                    <span className="font-bold text-gray-900">{stat.avgWage.toLocaleString(undefined, {maximumFractionDigits:0})}</span>
+                                                                </div>
+                                                                <div className="flex justify-between text-xs">
+                                                                    <span className="text-gray-500">상시인원</span>
+                                                                    <span className="font-medium text-gray-700">{stat.fte.toFixed(2)}</span>
+                                                                </div>
+                                                                    <div className="flex justify-between text-xs">
+                                                                    <span className="text-gray-500">임금증가율</span>
+                                                                    <span className={`font-medium ${stat.growthRate > 0 ? 'text-red-500' : 'text-blue-500'}`}>
+                                                                        {stat.growthRate !== undefined ? (stat.growthRate * 100).toFixed(2) + '%' : '-'}
+                                                                    </span>
+                                                                </div>
+                                                                {stat.names && stat.names.length > 0 && (
+                                                                    <div className="mt-2 pt-2 border-t border-gray-200">
+                                                                        <p className="text-[10px] text-gray-400 mb-1">포함된 사원 ({stat.names.length}명)</p>
+                                                                        <div className="text-[10px] text-gray-600 leading-tight break-keep">
+                                                                            {stat.names.join(', ')}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                                <p className="text-[10px] text-gray-400 mt-2">* 위 데이터는 {res.year}년 시점의 코호트(5년 내 퇴사자 제외 등) 기준으로 재산출된 값입니다.</p>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
+                            </React.Fragment>
+                        ))}
                         {incomeIncreaseResults.results.length === 0 && (
-                           <tr><td colSpan={7} className="py-8 text-gray-400">계산 가능한 구간이 없습니다 (직전 4년 포함 최소 5개년 데이터 필요)</td></tr>
-                       )}
-                   </tbody>
-               </table>
+                            <tr><td colSpan={11} className="py-8 text-gray-400">표시할 데이터가 없습니다.</td></tr>
+                        )}
+                    </tbody>
+                </table>
             </div>
             
             {/* Excluded Employees List */}
