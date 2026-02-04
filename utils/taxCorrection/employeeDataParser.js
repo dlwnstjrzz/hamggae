@@ -220,6 +220,133 @@ function analyzeYouthStatus(name, id, hireDate, retireDate, row, salaryStartCol,
   };
 }
 
+
+// New Adapter for JSON input (from excelParser.js)
+export function analyzeEmployee(empObj, year) {
+    const name = empObj['성명'];
+    const id = empObj['주민등록번호'] || '';
+    const hireDate = empObj['입사일'] ? new Date(empObj['입사일']) : null;
+    const retireDate = empObj['퇴사일'] ? new Date(empObj['퇴사일']) : null;
+    
+    // Re-use logic or duplicate for JSON structure?
+    // Since the original logic relies on row/col parsing, it's easier to duplicate the core logic adapted for JSON
+    
+    return calculateEmployeeTaxStatus(name, id, hireDate, retireDate, empObj, year);
+}
+
+function calculateEmployeeTaxStatus(name, id, hireDate, retireDate, empObj, year) {
+    let youthMonths = 0;
+    let normalMonths = 0;
+    let youthSalary = 0;
+    let normalSalary = 0;
+    let totalSalary = 0;
+  
+    let socialInsuranceTotalSalary = 0;
+    let socialInsuranceYouthSalary = 0;
+    let socialInsuranceNormalSalary = 0;
+    let socialInsuranceExcludedSalary = 0;
+    let resignationExcludedMonth = null;
+  
+    // Birthday from ID
+    let birthDate = null;
+    if (id && id.length >= 6) {
+        const front = id.substring(0, 6); 
+        let yy = parseInt(front.substring(0, 2));
+        if (!isNaN(yy)) {
+            let birthYearPrefix = (yy < 30) ? '20' : '19';
+            // Adjust for 1900s if it looks like a future date (simple heuristic, can be improved)
+            // But standard simple logic:
+            const y = parseInt(birthYearPrefix + front.substring(0, 2));
+            const m = parseInt(front.substring(2, 4)) - 1; 
+            const d = parseInt(front.substring(4, 6));
+            birthDate = new Date(y, m, d);
+        }
+    }
+  
+    for (let m = 1; m <= 12; m++) {
+        const monthEnd = new Date(year, m, 0); 
+        
+        let salary = 0;
+        // Access from JSON maps
+        const salVal = empObj.monthly_salary ? (empObj.monthly_salary[m] || 0) : 0;
+        const bonVal = empObj.monthly_bonus ? (empObj.monthly_bonus[m] || 0) : 0;
+        
+        salary = salVal + bonVal;
+        totalSalary += salary;
+  
+        // Age Calculation
+        let isYouth = false;
+        let age = -1;
+        
+        if (birthDate) {
+            age = calculateManAge(birthDate, monthEnd);
+            // 2025 Revision: 15~29 (up to 35 with military)
+            // Simplified for now: <= 29
+            if (age <= 29) isYouth = true;
+        }
+  
+        // Employment Status
+        let isEmployedAtMonthEnd = false;
+        if (hireDate && hireDate <= monthEnd) {
+            if (!retireDate || retireDate >= monthEnd) {
+                isEmployedAtMonthEnd = true;
+            }
+        }
+  
+        // Aggregation
+        if (isEmployedAtMonthEnd) {
+            if (isYouth) youthMonths++;
+            else normalMonths++;
+        }
+  
+        if (salary > 0) {
+            if (isYouth) youthSalary += salary;
+            else normalSalary += salary;
+  
+            // Social Insurance Exclusions (Resignation Month)
+            let isResignationMonth = false;
+            if (retireDate && retireDate.getFullYear() === year && retireDate.getMonth() + 1 === m) {
+                isResignationMonth = true;
+            }
+  
+            if (!isResignationMonth) {
+                if (isYouth) socialInsuranceYouthSalary += salary;
+                else socialInsuranceNormalSalary += salary;
+                socialInsuranceTotalSalary += salary;
+            } else {
+                socialInsuranceExcludedSalary += salary;
+                resignationExcludedMonth = m; 
+            }
+        }
+    }
+
+    // Age at Year End
+    let ageYearEnd = '';
+    if (birthDate) {
+        ageYearEnd = calculateManAge(birthDate, new Date(year, 12, 0));
+    }
+  
+    return {
+        year,
+        name,
+        id,
+        hireDate: hireDate ? hireDate.toISOString().split('T')[0] : null,
+        retireDate: retireDate ? retireDate.toISOString().split('T')[0] : null,
+        ageYearEnd,
+        totalSalary,
+        youthMonths,
+        normalMonths,
+        youthSalary,
+        normalSalary,
+        socialInsuranceTotalSalary,
+        socialInsuranceYouthSalary,
+        socialInsuranceNormalSalary,
+        socialInsuranceExcludedSalary,
+        resignationExcludedMonth,
+        isYouth: youthMonths > 0
+    };
+}
+
 function calculateManAge(birthDate, targetDate) {
     let age = targetDate.getFullYear() - birthDate.getFullYear();
     const m = targetDate.getMonth() - birthDate.getMonth();
@@ -228,3 +355,4 @@ function calculateManAge(birthDate, targetDate) {
     }
     return age;
 }
+

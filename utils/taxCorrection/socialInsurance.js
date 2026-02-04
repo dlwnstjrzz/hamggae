@@ -202,7 +202,8 @@ function calculateCreditAmounts(annualStats, settings) {
                 normalCredit,
                 support2ndYear,
                 
-                estimatedCredit: totalYearlyCredit + support2ndYear
+                estimatedCredit: totalYearlyCredit + support2ndYear,
+                calcDetails: `청년: ${Math.floor(youthCredit).toLocaleString()}원 (${recognizedYouthIncrease}명 × 1인당부담금 ${Math.floor(youthBurdenPerPerson).toLocaleString()}원) + 청년외: ${Math.floor(normalCredit).toLocaleString()}원 (${recognizedNormalIncrease}명 × 1인당부담금 ${Math.floor(normalBurdenPerPerson).toLocaleString()}원 × 감면율 ${deductionFactor*100}%)`
             });
         }
     }

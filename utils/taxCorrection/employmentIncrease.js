@@ -165,18 +165,25 @@ function calculateCreditAmounts(annualStats, settings) {
         }
 
         if (initialCredits[targetYear] || credit2nd > 0 || credit3rd > 0) {
-             calculations.push({
+            
+            // Extract values for reuse in calcDetails
+            const diffOverall = credit1stObj ? Number((stat.overallCount - credit1stObj.baseOverallCount).toFixed(2)) : 0;
+            const youthInc = credit1stObj ? credit1stObj.youthIncreaseRecognized : 0;
+            const otherInc = credit1stObj ? credit1stObj.otherIncreaseRecognized : 0;
+            
+            calculations.push({
                 year: targetYear,
-                diffOverall: credit1stObj ? Number((stat.overallCount - credit1stObj.baseOverallCount).toFixed(2)) : 0,
-                youthIncreaseRecognized: credit1stObj ? credit1stObj.youthIncreaseRecognized : 0,
-                otherIncreaseRecognized: credit1stObj ? credit1stObj.otherIncreaseRecognized : 0,
+                diffOverall: diffOverall,
+                youthIncreaseRecognized: youthInc,
+                otherIncreaseRecognized: otherInc,
                 credit1st,
                 credit2nd,
                 credit3rd,
                 totalCredit: credit1st + credit2nd + credit3rd,
                 // Add rates for display
                 youthRate,
-                otherRate
+                otherRate,
+                calcDetails: `청년: ${youthInc}명 × ${youthRate}만원 + 청년외: ${otherInc}명 × ${otherRate}만원`
             });
         }
     });
