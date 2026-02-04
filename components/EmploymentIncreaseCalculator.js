@@ -237,58 +237,49 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                     데이터가 변경되면 <strong style={{ color: COLORS.primary }}>[재계산]</strong> 버튼을 눌러주세요.
                  </p>
             </div>
-            
-            <div className="flex gap-4 items-end">
-                <div className="card bg-white shadow-sm border border-slate-200 z-10">
-                    <div className="card-body p-4 flex-row gap-6 items-center">
-                        <div className="form-control w-full max-w-xs">
-                            <label className="label py-1"><span className="label-text text-xs font-semibold text-slate-400">지역 구분</span></label>
-                            <Select 
-                                value={settings.region} 
-                                onChange={v => { setSettings({...settings, region: v}); setIsCalculated(false); }}
-                                style={{ width: 120 }}
-                                options={[
-                                    { value: 'capital', label: '수도권' },
-                                    { value: 'non-capital', label: '수도권 외' },
-                                ]}
-                            />
-                        </div>
-                        <div className="divider divider-horizontal m-0 h-10"></div>
-                        <div className="form-control w-full max-w-xs">
-                            <label className="label py-1"><span className="label-text text-xs font-semibold text-slate-400">기업 규모</span></label>
-                            <Select 
-                                value={settings.size} 
-                                onChange={v => { setSettings({...settings, size: v}); setIsCalculated(false); }}
-                                style={{ width: 120 }}
-                                options={[
-                                    { value: 'small', label: '중소기업' },
-                                    { value: 'middle', label: '중견기업' },
-                                    { value: 'large', label: '대기업' },
-                                ]}
-                            />
-                        </div>
-                    </div>
-                </div>
-                
-                <Button 
-                    type="primary" 
-                    icon={<CalculatorOutlined />} 
-                    size="large"
-                    onClick={handleRecalculate}
-                    style={{ 
-                        height: '74px', 
-                        paddingLeft: '32px', 
-                        paddingRight: '32px', 
-                        fontSize: '18px', 
-                        fontWeight: 'bold',
-                        backgroundColor: isCalculated ? COLORS.success : COLORS.primary,
-                        borderColor: isCalculated ? COLORS.success : COLORS.primary,
-                        boxShadow: '0 4px 14px 0 rgba(0,0,0,0.1)'
-                    }}
-                >
-                    {isCalculated ? '재계산 완료' : '계산 적용하기'}
-                </Button>
+ 
+            <div id="daisy-root">
+                    <span className="text-sm font-bold text-slate-400">지역/기업 구분</span>
+                    <form>
+                        <input 
+                            className="btn mr-1" 
+                            type="checkbox" 
+                            name="frameworks"
+                            aria-label="수도권"
+                            onChange={() => { setSettings({...settings, region: 'capital'}); setIsCalculated(false); }}
+                        />
+                        <input 
+                            className="btn mr-1" 
+                            type="checkbox" 
+                            name="frameworks"
+                            aria-label="수도권 외"
+                            onChange={() => { setSettings({...settings, region: 'non-capital'}); setIsCalculated(false); }}
+                        />
+                        <input 
+                            className="btn mr-1" 
+                            type="checkbox" 
+                            name="frameworks"
+                            aria-label="중소기업"
+                            onChange={() => { setSettings({...settings, size: 'small'}); setIsCalculated(false); }}
+                        />
+                        <input 
+                            className="btn mr-1" 
+                            type="checkbox" 
+                            name="frameworks" 
+                            aria-label="중견기업"
+                            onChange={() => { setSettings({...settings, size: 'middle'}); setIsCalculated(false); }}
+                        />
+                         <input 
+                            className="btn mr-1" 
+                            type="checkbox" 
+                            name="frameworks" 
+                            aria-label="대기업"
+                            onChange={() => { setSettings({...settings, size: 'large'}); setIsCalculated(false); }}
+                        />
+                        <input className="btn btn-square" type="reset" value="×"/>
+                    </form>
             </div>
+    
         </div>
 
         {/* Summary Table */}
@@ -342,7 +333,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
         
         <div className="flex justify-center my-8">
              <button 
-                className={`btn btn-lg rounded-full px-8 shadow-sm transition-all duration-300 ${showDetails ? 'btn-outline border-slate-300' : 'text-white'}`}
+                className={`btn btn-lg rounded-2xl px-8 shadow-sm transition-all duration-300 ${showDetails ? 'btn-outline border-slate-300' : 'text-white'}`}
                 style={!showDetails ? { backgroundColor: 'black', border: 'none' } : {}}
                 onClick={() => setShowDetails(!showDetails)}
             >
@@ -470,6 +461,17 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                             </table>
                         </div>
                     </div>
+                </div>
+
+                {/* Recalculate Button (Moved) */}
+                <div className="flex justify-end">
+                    <button 
+                        onClick={handleRecalculate}
+                        className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 h-10 px-4 py-2 bg-slate-900 text-white hover:bg-slate-800 shadow-sm gap-2"
+                    >
+                        <CalculatorOutlined />
+                        {isCalculated ? '재계산 완료' : '변경사항 적용 및 재계산'}
+                    </button>
                 </div>
 
                 {/* Excluded Executives & Shareholders List - Clean Matrix View */}
