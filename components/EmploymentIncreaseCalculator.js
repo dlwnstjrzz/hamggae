@@ -58,17 +58,25 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
       });
 
       // Auto-Detect Executives & Shareholders
+      const normalizeName = (name) => {
+          if (!name) return '';
+          // Remove anything in parentheses (e.g., (자), (재입사)) and any digits
+          return name.replace(/\(.*\)/g, '').replace(/[0-9]/g, '').trim();
+      };
+
       allEmployees = allEmployees.map(emp => {
           let reason = null;
+          const empNameClean = normalizeName(emp.name);
+          const empIdPrefix = emp.id ? emp.id.split('-')[0] : '';
 
           // 1. Check Executives (Registry)
           for (const reg of registryFiles) {
               const executives = reg.executives || [];
               for (const exec of executives) {
-                  const empIdPrefix = emp.id ? emp.id.split('-')[0] : '';
+                  const execNameClean = normalizeName(exec.name);
                   const execIdPrefix = exec.id ? exec.id.split('-')[0] : '';
                   
-                  const isNameMatch = emp.name === exec.name;
+                  const isNameMatch = empNameClean === execNameClean;
                   const isIdMatch = (empIdPrefix && execIdPrefix) ? (empIdPrefix === execIdPrefix) : true;
 
                   if (isNameMatch && isIdMatch) {
@@ -94,10 +102,10 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
 
                   const shareholders = tax.data?.shareholders || [];
                   for (const holder of shareholders) {
-                      const empIdPrefix = emp.id ? emp.id.split('-')[0] : '';
+                      const holderNameClean = normalizeName(holder.name);
                       const holderIdPrefix = holder.id ? holder.id.split('-')[0] : '';
 
-                      const isNameMatch = emp.name === holder.name;
+                      const isNameMatch = empNameClean === holderNameClean;
                       const isIdMatch = (empIdPrefix && holderIdPrefix) ? (empIdPrefix === holderIdPrefix) : true;
 
                       if (isNameMatch && isIdMatch) {
@@ -441,17 +449,13 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                                     className={`w-32 text-xs ${emp.exclusionReason ? 'opacity-100' : 'opacity-60 hover:opacity-100'}`}
                                                     dropdownMatchSelectWidth={false}
                                                     options={[
-                                                        { value: null, label: <span style={{ color: COLORS.success }}>Include (포함)</span> },
-                                                        { value: '임원', label: <span style={{ color: COLORS.danger, fontWeight: 'bold' }}>임원 (제외)</span> },
-                                                        { value: '최대주주및가족', label: <span style={{ color: COLORS.danger, fontWeight: 'bold' }}>최대주주 (제외)</span> },
-                                                        { value: '기타', label: <span className="text-gray-500">기타 (제외)</span> },
+                                                        { value: null, label: <span style={{ color: COLORS.success,fontWeight: 'bold' }}>포함</span> },
+                                                        { value: '임원', label: <span style={{ color: COLORS.danger, fontWeight: 'bold' }}>임원</span> },
+                                                        { value: '최대주주및가족', label: <span style={{ color: COLORS.danger, fontWeight: 'bold' }}>최대주주 및 친족</span> },
+                                                        { value: '기타', label: <span className="text-gray-500">계약직</span> },
                                                     ]}
                                                 />
-                                                {emp.exclusionReason && (
-                                                    <div className="text-[10px] font-bold mt-0.5" style={{ color: COLORS.danger }}>
-                                                        {emp.exclusionReason}
-                                                    </div>
-                                                )}
+            
                                             </td>
                                         </tr>
                                     ))}
@@ -467,6 +471,101 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                         </div>
                     </div>
                 </div>
+
+                {/* Excluded Executives & Shareholders List - Clean Matrix View */}
+                {processedData.some(d => d.exclusionReason) && (() => {
+                    // 1. Pivot Data Preparation
+                    const excludedIds = new Set(processedData.filter(d => d.exclusionReason).map(d => d.id));
+                    const grouped = {};
+                    const allYears = [...new Set(processedData.map(d => d.year))].sort((a,b) => a-b);
+
+                    processedData.forEach(d => {
+                        if (excludedIds.has(d.id)) { 
+                            if (!grouped[d.id]) {
+                                grouped[d.id] = {
+                                    name: d.name,
+                                    id: d.id,
+                                    hireDate: d.hireDate, // Assuming static for display, or take latest
+                                    retireDate: d.retireDate,
+                                    years: {} // map year -> data
+                                };
+                            }
+                            grouped[d.id].years[d.year] = d;
+                            // Update dates if needed (e.g. re-hire), but usually static for same ID
+                            if (d.hireDate) grouped[d.id].hireDate = d.hireDate;
+                            if (d.retireDate) grouped[d.id].retireDate = d.retireDate;
+                        }
+                    });
+
+                    return (
+                        <div className="card bg-white shadow-sm border border-slate-200">
+                            <div className="card-body p-6">
+                                <h3 className="card-title text-slate-800 mb-4 flex items-center gap-2">
+                                    <span className="text-xl">🚫</span> 제외 대상자 명단 (임원 및 최대주주 등)
+                                </h3>
+                                <p className="text-sm text-slate-500 mb-4">
+                                    주민등록번호 및 근로기간 등 <strong>고유 정보</strong>는 좌측에, 
+                                    연도별 <strong>제외 사유와 급여</strong>는 우측에 표시하여 변화를 한눈에 볼 수 있습니다.
+                                </p>
+                                <div className="overflow-x-auto">
+                                    <table className="table table-sm w-full text-center border-separate border-spacing-0">
+                                        <thead className="bg-slate-50 text-slate-600">
+                                            <tr>
+                                                <th className="bg-slate-50 sticky left-0 z-10 border-r border-slate-200 min-w-[80px]">이름</th>
+                                                <th className="bg-slate-50 border-r border-slate-200 min-w-[200px]">인적 사항</th>
+                                                {allYears.map(y => (
+                                                    <th key={y} className="min-w-[120px] border-b border-r border-slate-100 p-3">{y}년</th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {Object.values(grouped).map((person, idx) => {
+                                                return (
+                                                    <tr key={idx} className="hover">
+                                                        {/* 1. Name (Sticky) */}
+                                                        <td className="font-bold text-slate-700 bg-white sticky left-0 z-0 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                                                            {person.name}
+                                                        </td>
+                                                        
+                                                        {/* 2. Static Info (ID, Dates) */}
+                                                        <td className="text-xs text-left bg-slate-50/30 border-r border-slate-200 p-3">
+                                                            <div className="font-mono text-slate-500 mb-1">{person.id}</div>
+                                                            <div className="text-slate-400">
+                                                                {person.hireDate} ~ {person.retireDate || ''}
+                                                            </div>
+                                                        </td>
+
+                                                        {/* 3. Dynamic Year Columns */}
+                                                        {allYears.map(y => {
+                                                            const yearData = person.years[y];
+                                                            if (!yearData) return <td key={y} className="bg-slate-50/50 border-r border-slate-100">-</td>;
+                                                            
+                                                            const isExcluded = !!yearData.exclusionReason;
+                                                            return (
+                                                                <td key={y} className={`border-r border-slate-100 text-xs p-2 align-middle ${isExcluded ? 'bg-pink-50' : ''}`}>
+                                                                    <div className="flex flex-col items-center gap-1">
+                                                                        {isExcluded && (
+                                                                            <span className="badge badge-sm border-0 font-bold text-white bg-pink-500 w-full mb-1">
+                                                                                {yearData.exclusionReason}
+                                                                            </span>
+                                                                        )}
+                                                                        <span className={`font-mono font-bold ${isExcluded ? 'text-pink-700' : 'text-slate-400'}`}>
+                                                                            {formatCurrency(yearData.totalSalary)}
+                                                                        </span>
+                                                                    </div>
+                                                                </td>
+                                                            );
+                                                        })}
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })()}
 
                 {/* 2. Employment Increase Credit Details */}
                 {creditResults && (() => {
