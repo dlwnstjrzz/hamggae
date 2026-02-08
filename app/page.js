@@ -655,7 +655,7 @@ export default function Home() {
         
       </Content>
       <Footer style={{ textAlign: 'center', color: '#999', background: 'white' }}>
-        TAXGO ©2025 Created for Tax Professionals
+        TAXGO ©2026 Created for Tax Professionals
       </Footer>
     </Layout>
   );

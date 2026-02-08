@@ -851,7 +851,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {creditResults.annualAverages.sort((a,b) => b.year - a.year).slice(0, 5).map((stat) => {
+                                        {creditResults.annualAverages.sort((a,b) => b.year - a.year).slice(0, 7).map((stat) => {
                                             const result = creditResults.results.find(r => r.year === stat.year);
                                             const prevStat = creditResults.annualAverages.find(r => r.year === stat.year - 1);
                                             
@@ -875,7 +875,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
 
                                             return (
                                                 <tr key={stat.year} className="hover text-sm">
-                                                    <td className="font-bold bg-base-100">{stat.year}년</td>
+                                                    <td className="font-bold bg-base-100">{stat.year}</td>
                                                     <td className="font-mono text-primary font-bold">
                                                         {stat.youthCount.toFixed(2)}
                                                         {renderDiff(diffYouth)}
@@ -1030,7 +1030,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {socialInsuranceResults.annualStats.sort((a,b) => b.year - a.year).slice(0, 5).map((stat) => {
+                                        {socialInsuranceResults.annualStats.sort((a,b) => b.year - a.year).slice(0, 6).map((stat) => {
                                             const result = socialInsuranceResults.results.find(r => r.year === stat.year);
                                             const prevStat = socialInsuranceResults.annualStats.find(r => r.year === stat.year - 1);
                                             
@@ -1060,7 +1060,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                             return (
                                                 <React.Fragment key={stat.year}>
                                                 <tr className="hover text-sm">
-                                                    <td className="font-bold bg-base-100">{stat.year}년</td>
+                                                    <td className="font-bold bg-base-100">{stat.year}</td>
                                                     <td className="font-mono text-primary font-bold">
                                                         {stat.youthCount.toFixed(2)}
                                                         {renderDiff(diffYouth)}
