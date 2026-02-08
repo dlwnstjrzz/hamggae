@@ -18,6 +18,8 @@ function calculateAnnualAverages(employeeData) {
                 year: emp.year, 
                 totalYouthMonths: 0, 
                 totalNormalMonths: 0,
+                totalYouthSalary: 0,
+                totalNormalSalary: 0,
                 youthCount: 0,
                 normalCount: 0,
                 overallCount: 0
@@ -25,6 +27,10 @@ function calculateAnnualAverages(employeeData) {
         }
         byYear[emp.year].totalYouthMonths += emp.youthMonths;
         byYear[emp.year].totalNormalMonths += emp.normalMonths;
+
+        // Aggregate Salaries for Display
+        byYear[emp.year].totalYouthSalary += (emp.youthSalary || 0);
+        byYear[emp.year].totalNormalSalary += (emp.normalSalary || 0);
     });
 
     // 2. Calculate Averages

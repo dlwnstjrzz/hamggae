@@ -62,7 +62,9 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
         const empId = emp.id;
         if (!empId) return { isExcluded: true, reason: '식별 불가 (주민번호 미기재)' };
 
-        // 2. Check Resignation History FIRST (TargetYear-4 ~ TargetYear)
+
+
+        // 3. Check Resignation History FIRST (TargetYear-4 ~ TargetYear)
         for (let y = targetYear; y >= targetYear - 4; y--) {
             // Find ALL matching records (handle split rows or masked IDs)
             const matchingRecords = (dataByYear[y] || []).filter(d => isSamePerson(d, emp));
@@ -77,7 +79,7 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
             });
 
             if (resignedRecord) {
-                 return { isExcluded: true, reason: `5년 내 퇴사 이력 존재 (${y}년 퇴사)` };
+                 return { isExcluded: true, reason: '5년 내 퇴사이력', retireDate: resignedRecord.retireDate };
             }
         }
 
@@ -87,7 +89,7 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
             const yearTotalSalary = matchingRecords.reduce((sum, d) => sum + d.totalSalary, 0);
 
             if (yearTotalSalary > 70000000) {
-                return { isExcluded: true, reason: `총급여 7천만원 초과 (${y}년: ${(yearTotalSalary/10000).toFixed(0)}만원)` };
+                return { isExcluded: true, reason: '5년 내 연봉 7천 이상' };
             }
         }
 
@@ -114,7 +116,7 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
             if (!status.isExcluded) {
                 cohortEmployees.push(emp);
             } else {
-                excludedList.push({ name: emp.name, id: emp.id, reason: status.reason, year: targetYear });
+                excludedList.push({ name: emp.name, id: emp.id, reason: status.reason, year: targetYear, retireDate: status.retireDate });
             }
         });
 
@@ -134,6 +136,42 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
             
             // 1. Standard Wage (Includes everyone in cohort)
             const validForWageStd = empDataList;
+
+            // Calculate Excluded (All employees in Year Y - Included Cohort Members)
+            const allInYear = dataByYear[y] || [];
+            const includedIds = new Set(validForWageStd.map(e => e.id));
+            const excludedInYear = allInYear.filter(e => !includedIds.has(e.id)).map(e => {
+                // Check if they were excluded in Target Year (found in excludedList)
+                const exclusionRecord = excludedList.find(ex => isSamePerson(ex, e));
+                let reason = exclusionRecord ? exclusionRecord.reason : '연말 기준 미재직';
+                
+                // Unconditionally find the latest retireDate from ANY year history for this person
+                let displayRetireDate = e.retireDate || (exclusionRecord ? exclusionRecord.retireDate : null);
+
+                if (!displayRetireDate) {
+                    // Exhaustive search in all years
+                    const allYears = Object.keys(dataByYear).sort((a,b) => b-a); // Search recent first
+                    for (const yearKey of allYears) {
+                        const found = dataByYear[yearKey].find(d => isSamePerson(d, e));
+                        if (found && found.retireDate) {
+                            displayRetireDate = found.retireDate;
+                            break;
+                        }
+                    }
+                }
+
+                if (!exclusionRecord) {
+                    // Not in Target Year (e.g. resigned before). derive reason
+                    if (e.totalSalary > 70000000) reason = '5년 내 연봉 7천 이상';
+                    else if (displayRetireDate) reason = '5년 내 퇴사이력'; 
+                }
+                
+                return {
+                    ...e,
+                    reason: reason,
+                    retireDate: displayRetireDate
+                };
+            });
 
             // 2. Excluded New Hires Wage (Excludes hires in year Y)
             // Logic: HireDate < Y-01-01
@@ -159,7 +197,11 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
                 avgWage: (wageStatsStd.count > 0 && wageStatsStd.fte > 0) ? (getWageSum(wageStatsStd) / wageStatsStd.fte) : 0,
                 avgWageExcl: (wageStatsExcl.count > 0 && wageStatsExcl.fte > 0) ? (getWageSum(wageStatsExcl) / wageStatsExcl.fte) : 0,
                 fte: Math.floor(basicStats.fte * 100) / 100,
-                names: [...new Set(validForWageStd.map(e => e.name))].sort()
+                totalWages: wageStatsStd.totalWages, // For display
+                count: basicStats.count, // For display
+                names: [...new Set(validForWageStd.map(e => e.name))].sort(),
+                includedEmployees: validForWageStd, // Full objects for "Included" table
+                excludedEmployees: excludedInYear   // Full objects for "Excluded" table
             };
         });
 
@@ -348,33 +390,214 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
              smeReason.push('중소기업 아님');
         }
 
+        // --- Tax Credit Amount Calculation (Restored) ---
+        // Determine rate based on size
+        let potentialRate = 0.05;
+        if (settings.size === 'middle') potentialRate = 0.10;
+        else if (settings.size === 'small' || !settings.size) potentialRate = 0.20; 
+
+        const calcCredit = (excess) => excess > 0 ? Math.floor(excess * potentialRate) : 0;
+
         // Determine Final Excess Amount (Max of applicable methods)
-        const validExcesses = [];
-        if (isGeneralApplicable) validExcesses.push({ val: excessGeneral, method: 'general', desc: generalDesc });
-        if (isSpecialApplicable) validExcesses.push({ val: excessSpecial, method: 'special', desc: specialDesc });
-        if (isSMEApplicable) validExcesses.push({ val: excessSME, method: 'sme', desc: smeDesc });
+        // Also prepare detailed breakdown for UI display (Formula + Value Substitution)
+        const allCalculations = [];
+        
+        // Formulas (Symbolic)
+        const formulas = {
+            general: '(당해연도 총급여 - 직전연도 총급여 × (1 + 직전 3년 평균임금증가율)) × 직전연도 전체 상시근로자 수',
+            special: '{ (당해연도 총급여 + 직전연도 총급여) / 2 - 직전 2년 총급여 × (1 + 직전 2년 특례증가율) } × 직전연도 전체 상시근로자 수',
+            sme: '(당해연도 총급여 - 직전연도 총급여 × (1 + 중소기업 고시이자율)) × 직전연도 전체 상시근로자 수'
+        };
+
+        // Helper to strip label from desc
+        const stripLabel = (d) => d.includes(':') ? d.substring(d.indexOf(':') + 1).trim() : d;
+
+        if (isGeneralApplicable) {
+            allCalculations.push({ 
+                method: 'general', 
+                label: '일반계산', 
+                formula: formulas.general, 
+                desc: stripLabel(generalDesc), 
+                amount: excessGeneral,
+                credit: calcCredit(excessGeneral) 
+            });
+        }
+        if (isSpecialApplicable) {
+            allCalculations.push({ 
+                method: 'special', 
+                label: '계산특례', 
+                formula: formulas.special, 
+                desc: stripLabel(specialDesc), 
+                amount: excessSpecial,
+                credit: calcCredit(excessSpecial)
+            });
+        }
+        if (isSMEApplicable) {
+            allCalculations.push({ 
+                method: 'sme', 
+                label: '중소특례', 
+                formula: formulas.sme, 
+                desc: stripLabel(smeDesc), 
+                amount: excessSME,
+                credit: calcCredit(excessSME)
+            });
+        }
+        
         
         let calcDetails = '';
-
-        if (validExcesses.length > 0) {
-            // Sort by value desc
-            validExcesses.sort((a,b) => b.val - a.val);
-            excessAmount = validExcesses[0].val;
-            calculationMethod = validExcesses[0].method;
-            calcDetails = validExcesses[0].desc;
+        // Sort by amount desc to determine winner
+        if (allCalculations.length > 0) {
+            allCalculations.sort((a,b) => b.amount - a.amount);
+            excessAmount = allCalculations[0].amount;
+            calculationMethod = allCalculations[0].method;
+            calcDetails = allCalculations[0].desc; // Legacy support
         }
 
-        if (excessAmount > 0) {
-            let creditRate = 0.05; 
-            if (settings.size === 'small') creditRate = 0.2;
-            else if (settings.size === 'middle') creditRate = 0.1;
-            
-            creditAmount = excessAmount * creditRate;
+        // --- Structured Conditions Reuse logic (Variables are already defined above) ---
+        // smeConditions, generalConditions, specialConditions are defined above.
+        // Restoring definitions here because they were missing in scope
+        
+        // 1. SME
+        const smeConditions = [];
+        if (settings.size === 'small' || !settings.size) {
+             smeConditions.push({
+                label: '①증가율',
+                val: `${rateTPct}%`,
+                op: '>',
+                target: `${fixedRatePct}%`,
+                isMet: isCond1Met
+            });
+            smeConditions.push({
+                 label: '②인원',
+                 val: `${employeeCountCurr}`,
+                 op: '≥',
+                 target: `${employeeCountPre}`,
+                 isMet: isCond2Met
+            });
+            smeConditions.push({
+                 label: '③직전증가율',
+                 val: `${rateT1Pct}%`,
+                 op: '≥',
+                 target: '0%',
+                 isMet: isCond3Met
+            });
         }
+
+        // 2. General
+        const generalConditions = [];
+        const avgRateVal = typeof avgRateLast3Years !== 'undefined' ? avgRateLast3Years : 0;
+        generalConditions.push({
+            label: '①증가율',
+            val: `${(rateT * 100).toFixed(2)}%`,
+            op: '>',
+            target: `${(avgRateVal * 100).toFixed(2)}%`,
+            isMet: excessGeneral > 0 
+        });
+
+        // 3. Special
+        const specialConditions = [];
+        if (useSpecialProvision) {
+             const cond1 = (rateT_1 < 0);
+             const cond2 = (rateT_1 >= 0 && avgRateVal > 0 && rateT_1 < 0.3 * avgRateVal);
+             
+             if (cond1) {
+                  specialConditions.push({
+                      label: '①직전증가율',
+                      val: `${rateT1Pct}%`,
+                      op: '<',
+                      target: '0%',
+                      isMet: true
+                  });
+             } else if (cond2) {
+                 const targetPct = (0.3 * avgRateVal * 100).toFixed(2);
+                 specialConditions.push({
+                      label: '①직전증가율',
+                      val: `${rateT1Pct}%`,
+                      op: '<',
+                      target: `${targetPct}% (30%평균)`,
+                      isMet: true
+                  });
+             }
+        }
+
+
+        // Define credits for use in failure logic logic and final results (Re-introduced)
+        const creditGeneral = calcCredit(excessGeneral);
+        const creditSpecial = calcCredit(excessSpecial);
+        const creditSME = calcCredit(excessSME);
+
+        // --- Failure Remarks Logic (Only for Remark Column) ---
+        let failureNote = '';
+        
+        if (excessAmount <= 0) {
+             const notes = [];
+             let curReason = '';
+             let altReason = '';
+             // Simplified context
+             const contextMethodName = useSpecialProvision ? '계산특례' : '일반계산';
+             const contextReason = useSpecialProvision 
+                ? (creditSpecial <= 0 ? '증가율 미달/음수' : '') 
+                : (creditGeneral <= 0 ? (rateT > avgRateLast3Years ? '증가율 미달(계산액 음수)' : '증가율 미달') : '');
+
+             const smeName = '중소특례';
+             let smeReasonText = '';
+             if (settings.size === 'small' || !settings.size) { 
+                 if (!isSMEConditionsMet) smeReasonText = '요건 미충족';
+                 else if (creditSME <= 0) smeReasonText = '계산액 없음(음수)';
+             } else {
+                 smeReasonText = '대상 아님(비중소)';
+             }
+
+             if (calculationMethod === 'sme') {
+                 if (!isSMEConditionsMet) curReason = '요건 미충족';
+                 else curReason = '계산액 없음';
+                 altReason = contextReason;
+             } else {
+                 curReason = contextReason || '증가율 미달';
+                 altReason = smeReasonText;
+             }
+             
+            // Show both in failure note
+            const parts = [];
+            parts.push(`${calculationMethod === 'sme' ? '중소특례' : contextMethodName}: ${curReason}`);
+            // Only show alt reason if relevant (e.g. SME failed too)
+            if (altReason) parts.push(`${calculationMethod === 'sme' ? contextMethodName : smeName}: ${altReason}`);
+            failureNote = parts.join(' / ');
+        }
+        
+        // Final Tax Credit Calculation
+        const finalCredit = calcCredit(excessAmount);
 
         results.push({
             year: targetYear,
+            excessAmount: excessAmount, // Tax Base
+            taxCredit: finalCredit,
+            
+            // Debug/View Props
+            excessGeneral: excessGeneral,
+            creditGeneral: calcCredit(excessGeneral),
+            
+            excessSME: excessSME,
+            creditSME: calcCredit(excessSME),
+            
+            isSMEApplicable: isSMEApplicable, 
+            smeConditions: smeConditions, 
+            smeConditionsMet: isSMEConditionsMet,
+            generalConditions: generalConditions,
+            specialConditions: specialConditions,
+
+            isCreditCalculable: hasFullHistory,
+            history: yearlyStats, 
+            calcDetails: calcDetails, // Keep for backward compat
+            calculationMethod: calculationMethod, 
+            
+            allCalculations: allCalculations, // New structured details
+            
+            failureNote: failureNote,
+            // comparisonResult removed
+            
             cohortCount: cohortEmployees.length, 
+            includedEmployees: cohortEmployees, 
             excludedEmployees: excludedList, 
             avgWageT: wageT,
             avgWageT_1: wageT_1,
@@ -384,18 +607,8 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
             avgPrevRate: avgRateLast3Years,
             employeeCountPre: employeeCountPre,
             employeeCountCurr: employeeCountCurr,
-            excessAmount: excessAmount,
-            taxCredit: creditAmount,
-            smeExcessAmount: excessSME, // Specific request to see SME calc
-            smeDesc: smeDesc,
-            isSMEApplicable: isSMEApplicable, // This implies Amount > 0 and Conditions Met
-            smeConditionsMet: isSMEConditionsMet, // Conditions Met (Status)
-            smeReason: smeReason.join(', '), // Reasons for failure
-            isCreditCalculable: hasFullHistory,
-            history: yearlyStats, // Pass the detailed context-aware history
-            calcDetails: calcDetails, // Passed to UI
-            calculationMethod: calculationMethod, // 'general', 'special', 'sme'
-            smeRequirementsDesc: smeRequirementsDesc // Passed to UI
+            smeDesc: smeDesc, 
+            smeRequirementsDesc: smeRequirementsDesc 
         });
 
     });

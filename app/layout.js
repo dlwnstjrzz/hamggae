@@ -32,9 +32,9 @@ export default function RootLayout({ children }) {
                 theme={{
                     token: {
                         colorPrimary: '#000000',
-                        colorSuccess: '#10B981', // Emerald 500
-                        colorWarning: '#F59E0B', // Amber 500
-                        colorError: '#EF4444', // Red 500
+                        colorSuccess: '#00D3BB', 
+                        colorWarning: '#FCB700', 
+                        colorError: '#EF4444', 
                         colorInfo: '#000000',
                         fontFamily: "var(--font-geist-sans), Pretendard, sans-serif",
                         borderRadius: 6,
