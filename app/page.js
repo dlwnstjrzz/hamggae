@@ -284,7 +284,7 @@ export default function Home() {
       </div>
       
       <Header 
-        className="sticky top-0 z-50 w-full transition-all"
+        className="z-50 w-full transition-all"
         style={{ 
             paddingInline: 24, 
             paddingLeft: 'max(24px, calc((100% - 1200px) / 2))', 
