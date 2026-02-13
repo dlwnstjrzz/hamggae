@@ -205,6 +205,7 @@ export async function processTaxReturnPDF(pdf, filename) {
   console.log(`-> [법인세신고서] 추출된 연도: ${result.year}`);
 
   let taxCreditStartPageIdx = -1; // 세액공제조정명세서 시작 페이지 인덱스
+  let adjustmentPageProcessed = false;
 
 
   // 페이지 순회
@@ -241,7 +242,8 @@ export async function processTaxReturnPDF(pdf, filename) {
 
     // 2. 법인세과세표준및세액조정계산서 (나머지 항목 추출)
     // 줄바꿈 등으로 "법인세과세표준및..." 전체가 안 붙어있을 수 있으므로 "세액조정계산서"만 포함돼도 인정
-    if (textNoSpace.includes('세액조정계산서')) {
+    if (textNoSpace.includes('세액조정계산서') && !adjustmentPageProcessed) {
+      adjustmentPageProcessed = true;
       console.log(`[Page ${i + 1}] 법인세과세표준및세액조정계산서(세액조정계산서 키워드) 발견`);
       
       // 1. 산출세액 (12) -> 기존 로직 유지하되, 위에서 찾았으면 덮어쓰지 않거나 여기서 찾은걸 우선할지 결정
