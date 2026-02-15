@@ -187,10 +187,10 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
             const wageStatsExcl = calculateStats(validForWageExcl, y);
             const basicStats = calculateStats(empDataList, y); // For FTE (Always Standard for FTE?)
             
-            // Determine wage source based on year (User Requirement)
-            // 2023 onwards: Use Actual Total Wages (No annualization)
-            // Up to 2022: Use Annualized Wages
-            const useActualWages = y >= 2023;
+            // Determine wage source based on TARGET YEAR (User Requirement)
+            // Target Year 2023+: Use Actual Total Wages for ALL history years
+            // Target Year ~2022: Use Annualized Wages for ALL history years
+            const useActualWages = targetYear >= 2023;
             const getWageSum = (stats) => useActualWages ? stats.totalWages : stats.totalAnnualizedWages;
 
             yearlyStats[y] = {
