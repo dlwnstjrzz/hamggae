@@ -816,13 +816,13 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                       ))}
                   </div>
                   
-                  <button 
+                  {/* <button 
                       className="btn btn-primary btn-sm gap-2"
                       onClick={() => generateTaxCreditExcel(processedData, incomeIncreaseResults)}
                   >
                       <DownloadOutlined />
                       소명자료 다운로드 (Excel)
-                  </button>
+                  </button> */}
               </div>
                  
                  <div className="flex gap-2">
