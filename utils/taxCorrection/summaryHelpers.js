@@ -11,19 +11,31 @@ export function aggregateTaxCreditSummary(creditResults, socialInsuranceResults,
     const summary = {};
     const yearsSet = new Set();
 
-    // 1. Employment Increase / Integrated Employment Credit
-    if (creditResults && creditResults.results) {
+    // 1. Employment Increase Credit
+    if (creditResults && creditResults.employmentIncreaseResults) {
+        creditResults.employmentIncreaseResults.forEach(res => {
+            const year = res.year;
+            yearsSet.add(year);
+            if (!summary[year]) summary[year] = {};
+            summary[year]['employmentIncrease'] = res.totalCredit;
+        });
+    } else if (creditResults && creditResults.results) {
+        // Fallback for backward compatibility
         creditResults.results.forEach(res => {
             const year = res.year;
             yearsSet.add(year);
             if (!summary[year]) summary[year] = {};
+            summary[year]['employmentIncrease'] = res.totalCredit;
+        });
+    }
 
-            // Determine category based on year
-            // 2023 onwards: Integrated Employment Tax Credit (통합고용 세액공제)
-            // Before 2023: Employment Increase Tax Credit (고용증대 세액공제)
-            const category = year >= 2023 ? 'integratedEmployment' : 'employmentIncrease';
-            
-            summary[year][category] = res.totalCredit;
+    // 2. Integrated Employment Credit
+    if (creditResults && creditResults.integratedEmploymentResults) {
+        creditResults.integratedEmploymentResults.forEach(res => {
+            const year = res.year;
+            yearsSet.add(year);
+            if (!summary[year]) summary[year] = {};
+            summary[year]['integratedEmployment'] = res.totalCredit;
         });
     }
 
