@@ -26,6 +26,186 @@ function groupWordsByLine(words) {
   return lines;
 }
 
+// 좌표 기반 테이블 추출 함수 (세액공제조정명세서 3 전용)
+function extractCreditsFromTablePage(words, pageIndex) {
+  console.log(`[TableExtraction] Page ${pageIndex} - 진입 (Refined Logic v2: Grouping & Cleaning)`);
+
+  // 1. 헤더 찾기
+  // (105) 구분
+  // (106) 사업연도 (Name Column의 우측 경계)
+  // (120) 계 (Amount Column) - 사용자 요청 변경 (123 -> 120)
+  // (121) 최저한세적용... (Amount Column의 우측 경계 추정)
+  
+  let header105 = null;
+  let header106 = null; 
+  let header120 = null;
+  let header121 = null; 
+
+  // 헤더 탐색 (정확한 텍스트 매칭 보다는 포함 여부)
+  for (const w of words) {
+    if (w.text.includes('(105)')) header105 = w;
+    if (w.text.includes('(106)')) header106 = w;
+    if (w.text.includes('(120)')) header120 = w;
+    if (w.text.includes('(121)')) header121 = w;
+  }
+
+  // 필수 헤더 체크
+  if (!header105 || !header120) {
+    console.log(`[TableExtraction] 필수 헤더 미발견: (105)=${!!header105}, (120)=${!!header120}`);
+    return [];
+  }
+
+  console.log(`[TableExtraction] 헤더 좌표:`);
+  console.log(`  - (105) 구분: x=${header105.x0}`);
+  if (header106) console.log(`  - (106) 사업연도: x=${header106.x0}`);
+  console.log(`  - (120) 계: x=${header120.x0}`);
+
+  // 2. 컬럼 범위 설정
+  // 날짜가 이름에 붙는 현상이 여전하므로, (106) 기준으로 자르되, 나중에 정규식으로도 한번 더 정리함.
+  const colNameStart = header105.x0 - 10;
+  const colNameEnd = header106 ? (header106.x0 - 2) : (header105.x0 + 150); 
+
+  // Amount Column: (120).x0 - 5 ~ (121).x0 (없으면 +80)
+  const colAmountStart = header120.x0 - 10;
+  const colAmountEnd = header121 ? header121.x0 : (header120.x0 + 80);
+
+  console.log(`[TableExtraction] 컬럼 유효 범위:`);
+  console.log(`  - Name: ${colNameStart} ~ ${colNameEnd}`);
+  console.log(`  - Amount: ${colAmountStart} ~ ${colAmountEnd}`);
+
+  // 3. 줄 단위 그룹핑
+  const headerBottom = Math.max(header105.top, header120.top) + 10;
+  const contentWords = words.filter(w => w.top > headerBottom);
+  const lines = groupWordsByLine(contentWords);
+
+  console.log(`[TableExtraction] 본문 라인 수: ${lines.length}`);
+
+  let pendingNameParts = []; 
+  const aggregatedCredits = new Map(); // "표준이름" -> 금액 합계
+
+  // 표준화 매핑 로직
+  // 키워드 : 표준명칭
+  const KEYWORD_MAPPING = [
+      { keyword: '고용을증대', name: '고용을 증대시킨 기업에 대한 세액공제' },
+      { keyword: '개발비세액', name: '일반 연구ㆍ인력개발비세액공제' },
+      { keyword: '일반연구', name: '일반 연구ㆍ인력개발비세액공제' },
+      { keyword: '중소기업고용', name: '중소기업고용증가인원에대한사회보험료세액공제' }, // 14Q 추정
+      { keyword: '통합고용', name: '통합고용세액공제' },
+      { keyword: '통합투자', name: '통합투자세액공제' }
+  ];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    line.sort((a, b) => a.x0 - b.x0);
+
+    const lineFullText = line.map(w => w.text).join(' ');
+
+    // 소계/합계 처리
+    // 소계나 합계 라인에도 금액이 있을 수 있으나, 보통 "항목별 공제금액"을 원하므로 제외
+    // 만약 소계 행도 필요하다면 조건 수정 필요.
+    if (lineFullText.includes('소계') || lineFullText.includes('합계')) {
+        console.log(`  [Line ${i}] 소계/합계 행 무시 (Pending Name Reset)`);
+        pendingNameParts = []; // 소계를 만나면 버퍼 초기화
+        continue;
+    }
+
+    let lineNameParts = [];
+    let lineAmountParts = [];
+
+    for (const w of line) {
+        const wCenter = (w.x0 + w.x1) / 2;
+        
+        // Name Column
+        if (wCenter >= colNameStart && wCenter <= colNameEnd) {
+            lineNameParts.push(w.text);
+        }
+        
+        // Amount Column
+        if (wCenter >= colAmountStart && wCenter <= colAmountEnd) {
+            lineAmountParts.push(w.text);
+        }
+    }
+
+    const currentNameStr = lineNameParts.join('').trim();
+    const currentAmountStr = lineAmountParts.join('').replace(/,/g, '').trim();
+
+    // 로직:
+    // 1. 이름 파트가 있으면 버퍼에 추가.
+    // 2. 금액 파트가 있으면, 버퍼에 있는 이름들 + 현재 라인 이름 합쳐서 하나의 항목으로 확정.
+    // 3. 금액이 없으면 계속 다음 줄로 진행 (이름이 길어서 다음 줄로 넘어갔거나, 금액이 빈 칸인 경우)
+
+    if (currentNameStr) {
+        pendingNameParts.push(currentNameStr);
+    }
+
+    if (currentAmountStr) {
+        const amount = parseInt(currentAmountStr, 10);
+        if (!isNaN(amount) && amount > 0) {
+            // 이름 조합 (공백 없이 붙일지, 띄어쓰기 할지 결정. 보통 한글 단어 끊김이므로 그냥 붙이거나 공백 하나)
+            // 사용자 예시: "일반연구" + "력개발비..." -> "일반연구력개발비..." (붙여야 함)
+            let fullName = pendingNameParts.join('').trim(); 
+            
+            // 1. 날짜/숫자 제거 (YYYY.MM 형태 제거)
+            // 예: "고용을증대시2022.12" -> "고용을증대시"
+            // 끝에 붙은 날짜 패턴 제거
+            fullName = fullName.replace(/\d{4}\.\d{2}$/, ''); 
+            fullName = fullName.replace(/[\d.]+$/, ''); // 혹시 남은 뒤쪽 숫자/점 제거
+
+            // [NEW] 합계/소계 등 불필요 항목 한번 더 필터링
+            // 공백 제거 후 비교
+            const cleanName = fullName.replace(/\s/g, '');
+            if (['합계', '소계', '계', '합'].includes(cleanName)) {
+                console.log(`  [Line ${i}] 합계/소계 항목 무시: "${fullName}"`);
+                pendingNameParts = [];
+                continue; // 저장 안 하고 건너뜀
+            }
+
+            // 2. 키워드 매칭 및 그룹화
+            let standardName = fullName; // 기본값: 원본(정제된) 이름
+            let matched = false;
+
+            for (const map of KEYWORD_MAPPING) {
+                if (fullName.includes(map.keyword)) {
+                    standardName = map.name;
+                    matched = true;
+                    break;
+                }
+            }
+            
+            console.log(`  [Line ${i}] 추출 -> 원본: "${fullName}", 표준명: "${standardName}", 금액: ${amount}`);
+            
+            // 합산
+            const currentTotal = aggregatedCredits.get(standardName) || 0;
+            aggregatedCredits.set(standardName, currentTotal + amount);
+
+            // 확정 후 버퍼 초기화
+            pendingNameParts = []; 
+        } else {
+            // 0원이거나 잘못된 숫자
+            // console.log(`  [Line ${i}] 0원 또는 유효하지 않음 (${currentAmountStr}). 버퍼 유지.`);
+        }
+    } else {
+        // 금액이 없는 줄. 이름만 있는 줄일 수 있음. 버퍼 유지.
+        if (currentNameStr) {
+            console.log(`  [Line ${i}] 이름 일부 발견(금액 없음): "${currentNameStr}" -> 버퍼 적재 [${pendingNameParts.join('')}]`);
+        }
+    }
+  }
+
+  // Map -> Array 변환
+  const extractedItems = [];
+  for (const [name, amount] of aggregatedCredits) {
+      console.log(`  [Result] 최종 집계: ${name} = ${amount}`);
+      extractedItems.push({
+          name: name,
+          amount: amount,
+          code: 'UNKNOWN' 
+      });
+  }
+
+  return extractedItems;
+}
+
 // 키워드와 지시자(번호)를 이용해 값 추출
 function findValueByKeywords(words, keyword, indicator) {
   const lines = groupWordsByLine(words);
@@ -361,6 +541,7 @@ export async function processTaxReturnPDF(pdf, filename) {
     const isInCreditRange = (taxCreditStartPageIdx !== -1 && i <= taxCreditStartPageIdx + 2);
     
     // 세액공제조정명세서 관련 페이지라면 (PDF.js Raw Text + 정규식 + 코드매핑)
+    /*
     if ((textNoSpace.includes('세액공제조정명세서') || isInCreditRange) && !isMinTaxPage && !isReportPage) {
        console.log(`[Page ${i + 1}] 세액공제조정명세서 감지 - 정규식(Regex) 기반 추출 시도`);
        
@@ -478,6 +659,34 @@ export async function processTaxReturnPDF(pdf, filename) {
                // console.log(`   - [Skip] 금액 미달/0: ${name} (${code}) = ${amount}`);
            }
        }
+    }
+    */
+    
+    // [NEW] 세액공제조정명세서 (3) 테이블 파싱 로직 추가
+    // 정규식 로직과 별도로 동작하며, (3) 페이지가 명확하면 이 로직을 우선하거나 병합할 수 있음.
+    // 여기서는 (3) 페이지가 감지되면 실행.
+    if (textNoSpace.includes('세액공제조정명세서(3)')) {
+         console.log(`[Page ${i + 1}] 세액공제조정명세서(3) 테이블 파싱 시도`);
+         const tableItems = extractCreditsFromTablePage(words, i + 1);
+         
+         if (tableItems.length > 0) {
+             console.log(`[Page ${i + 1}] 테이블 파싱 결과 ${tableItems.length}건 추가/병합`);
+             
+             for (const item of tableItems) {
+                 // 기존 리스트에 중복 확인 후 추가 (이름+금액 기준)
+                 const exists = result.data.taxCredits.some(c => c.name === item.name && c.amount === item.amount);
+                 if (!exists) {
+                     result.data.taxCredits.push({
+                         name: item.name,
+                         code: item.code, // 'UNKNOWN'일 수 있음
+                         amount: item.amount
+                     });
+                     console.log(`   + [Table] 추가됨: ${item.name} = ${item.amount}`);
+                 } else {
+                     console.log(`   . [Table] 중복 생략: ${item.name}`);
+                 }
+             }
+         }
     }
 
     // 주식등변동상황명세서 감지
