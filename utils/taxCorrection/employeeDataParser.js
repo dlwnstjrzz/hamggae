@@ -153,11 +153,15 @@ function analyzeYouthStatus(name, id, hireDate, retireDate, row, salaryStartCol,
           if (age <= 29) isYouth = true;
       }
 
-      // Employment Status at Month End
+      // Employment Status at Month End (Use String Comparison to avoid Timezone issues)
       let isEmployedAtMonthEnd = false;
+      
+      const monthEndStr = monthEnd.toISOString().split('T')[0];
+      const hDateStr = hDate ? hDate.toISOString().split('T')[0] : null;
+      const rDateStr = rDate ? rDate.toISOString().split('T')[0] : null;
 
-      if (hDate && hDate <= monthEnd) {
-          if (!rDate || rDate >= monthEnd) {
+      if (hDateStr && hDateStr <= monthEndStr) {
+          if (!rDateStr || rDateStr >= monthEndStr) {
               isEmployedAtMonthEnd = true;
           }
       }
@@ -285,10 +289,15 @@ function calculateEmployeeTaxStatus(name, id, hireDate, retireDate, empObj, year
             if (age <= 29) isYouth = true;
         }
   
-        // Employment Status
+        // Employment Status (Use String Comparison)
         let isEmployedAtMonthEnd = false;
-        if (hireDate && hireDate <= monthEnd) {
-            if (!retireDate || retireDate >= monthEnd) {
+        
+        const monthEndStr = monthEnd.toISOString().split('T')[0];
+        const hDateStr = hireDate ? hireDate.toISOString().split('T')[0] : null;
+        const rDateStr = retireDate ? retireDate.toISOString().split('T')[0] : null;
+
+        if (hDateStr && hDateStr <= monthEndStr) {
+            if (!rDateStr || rDateStr >= monthEndStr) {
                 isEmployedAtMonthEnd = true;
             }
         }

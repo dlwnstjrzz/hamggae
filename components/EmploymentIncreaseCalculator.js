@@ -119,20 +119,20 @@ const IncomeCohortCard = ({ record, formatNumber }) => {
                                         </td>
                                         <td className="font-mono">
                                             {stat.fte}명
-                                            <div className="text-[10px] text-base-content/40 opacity-70 mt-0.5">
+                                            <div className="text-xs text-base-content/40 opacity-70 mt-1">
                                                 {stat.fteNumerator || 0} / {stat.fteDenominator || 12}
                                             </div>
                                         </td>
                                         <td className="font-mono text-sm">
                                             {formatNumber(stat.avgWage)}
-                                            <div className="text-[10px] text-base-content/40 opacity-70 mt-0.5">
+                                            <div className="text-xs text-base-content/40 opacity-70 mt-1">
                                                 {formatNumber(stat.avgWageNumerator || 0)} / {(stat.avgWageDenominator || 0).toFixed(2)}
                                             </div>
                                         </td>
                                         <td className="font-mono text-sm">
                                             <div className="tooltip" data-tip="신규 입사자를 제외한 재직자 평균임금">
                                                 {formatNumber(stat.avgWageExcl)}
-                                                <div className="text-[10px] text-base-content/40 opacity-70 mt-0.5 font-normal">
+                                                <div className="text-xs text-base-content/40 opacity-70 mt-1 font-normal">
                                                     {formatNumber(stat.avgWageExclNumerator || 0)} / {(stat.avgWageExclDenominator || 0).toFixed(2)}
                                                 </div>
                                             </div>
@@ -491,7 +491,7 @@ const EmployeeListTable = ({ yearData, onUpdateExclusion, formatNumber }) => {
 
 export default function EmploymentIncreaseCalculator({ initialData }) {
   const [processedData, setProcessedData] = useState([]);
-  const [activeMainTab, setActiveMainTab] = useState('summary'); // 'summary', 'employment', 'social', 'income'
+  const [activeMainTab, setActiveMainTab] = useState('summary'); // 'summary', 'employment', 'integrated', 'social', 'income'
   const [activeYearTab, setActiveYearTab] = useState(null); // Managed via radio inputs for tabs-lifted
 
   const [summaryData, setSummaryData] = useState(null);
@@ -500,7 +500,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
   const [settings, setSettings] = useState({ region: 'capital', size: 'small' });
 
   // Results
-  const [creditResults, setCreditResults] = useState(null);
+  const [creditResults, setCreditResults] = useState(null); // Contains both employmentIncreaseResults and integratedEmploymentResults
   const [socialInsuranceResults, setSocialInsuranceResults] = useState(null);
   const [incomeIncreaseResults, setIncomeIncreaseResults] = useState(null);
 
@@ -961,7 +961,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                     </thead>
                                     <tbody>
                                         {creditResults.annualAverages.filter(stat => stat.year >= 2023).sort((a,b) => b.year - a.year).map((stat) => {
-                                            const result = creditResults.results.find(r => r.year === stat.year);
+                                            const result = creditResults.integratedEmploymentResults.find(r => r.year === stat.year);
                                             const prevStat = creditResults.annualAverages.find(r => r.year === stat.year - 1);
                                             
                                             // Calculate YoY Differences
@@ -977,7 +977,8 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                                 return <span className={`text-xs font-bold block ${color}`}>({sign}{val.toFixed(2)})</span>;
                                             };
 
-                                            // Conditions Logic
+                                            // Conditions Logic for Integrated Credit (Always Eligible if result exists basically, check specific fields)
+                                            // The `calculateIntegratedCredit` function returns results only if eligible.
                                             const isNewEligible = result && result.credit1st > 0;
                                             const is2ndEligible = result && result.credit2nd > 0;
                                             const is3rdEligible = result && result.credit3rd > 0;
@@ -1061,7 +1062,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                             {creditResults.results.filter(res => res.year >= 2023).sort((a,b) => b.year - a.year).map((res) => {
+                                             {creditResults.integratedEmploymentResults.sort((a,b) => b.year - a.year).map((res) => {
                                                 const getCycleColor = (originYear) => {
                                                     const colors = ['#F43099', '#615EFF', '#00D3BB', '#FCB700'];
                                                     return colors[(originYear) % 4];
@@ -1084,7 +1085,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                                 </tr>
                                              )})}
                                         </tbody>
-                                        {creditResults.results.filter(res => res.year >= 2023).length === 0 && (
+                                        {creditResults.integratedEmploymentResults.length === 0 && (
                                             <tbody>
                                                 <tr><td colSpan={5} className="py-6 text-center opacity-40">공제 내역이 없습니다.</td></tr>
                                             </tbody>
@@ -1111,14 +1112,14 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                 </div>
             )}
 
-            {/* TAB 3: EMPLOYMENT INCREASE (< 2023) */}
+            {/* TAB 3: EMPLOYMENT INCREASE (Old Logic, All Years) */}
             {activeMainTab === 'employment' && creditResults && (
                 <div className="space-y-8 animate-in fade-in">
                      {/* Calculation Result Table */}
                      <div className="card shadow-sm bg-base-100 border border-base-200">
                              <div className="card-body p-6">
                             <h3 className="card-title mb-6 flex items-center justify-between">
-                                <span>💰 고용증대 세액공제 계산 결과 (2022년 이전)</span>
+                                <span>💰 고용증대 세액공제 계산 결과 (전체 연도)</span>
                                 <div className="badge badge-ghost text-sm font-normal">청년 등 / 청년 외 구분</div>
                             </h3>
                             
@@ -1142,8 +1143,9 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {creditResults.annualAverages.filter(stat => stat.year < 2023).sort((a,b) => b.year - a.year).map((stat) => {
-                                            const result = creditResults.results.find(r => r.year === stat.year);
+                                        {/* Show ALL years, but prioritize order */}
+                                        {creditResults.annualAverages.sort((a,b) => b.year - a.year).map((stat) => {
+                                            const result = creditResults.employmentIncreaseResults.find(r => r.year === stat.year);
                                             const prevStat = creditResults.annualAverages.find(r => r.year === stat.year - 1);
                                             
                                             // Calculate YoY Differences
@@ -1219,8 +1221,8 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                                 </tr>
                                             );
                                         })}
-                                        {creditResults.annualAverages.filter(stat => stat.year < 2023).length === 0 && (
-                                            <tr><td colSpan={8} className="py-10 text-center opacity-40">2022년 이전 데이터가 없습니다.</td></tr>
+                                        {creditResults.annualAverages.length === 0 && (
+                                            <tr><td colSpan={8} className="py-10 text-center opacity-40">데이터가 없습니다.</td></tr>
                                         )}
                                     </tbody>
                                 </table>
@@ -1243,7 +1245,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                             {creditResults.results.filter(res => res.year < 2023).sort((a,b) => b.year - a.year).map((res) => {
+                                             {creditResults.employmentIncreaseResults.sort((a,b) => b.year - a.year).map((res) => {
                                                 const getCycleColor = (originYear) => {
                                                     const colors = ['#F43099', '#615EFF', '#00D3BB', '#FCB700'];
                                                     return colors[(originYear) % 4];
@@ -1266,7 +1268,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                                 </tr>
                                              )})}
                                         </tbody>
-                                        {creditResults.results.filter(res => res.year < 2023).length === 0 && (
+                                        {creditResults.employmentIncreaseResults.length === 0 && (
                                             <tbody>
                                                 <tr><td colSpan={5} className="py-6 text-center opacity-40">공제 내역이 없습니다.</td></tr>
                                             </tbody>
@@ -1280,7 +1282,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                      {/* Regular Employee List */}
                      <div className="mt-8">
                          <h3 className="font-bold text-md mb-4 px-2">연도별 상시근로자 리스트</h3>
-                          <YearTabs data={processedData.filter(d => d.year < 2023)}>
+                          <YearTabs data={processedData}>
                              {(year, yearData) => (
                                  <EmployeeListTable 
                                      yearData={yearData} 
