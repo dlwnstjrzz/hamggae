@@ -910,6 +910,183 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                         </div>
                     </div>
 
+                    {/* Comprehensive Tax Credit Plan Table (New Request) */}
+                    <div className="card shadow-sm bg-base-100 border border-base-200 mt-8">
+                        <div className="card-body p-0">
+                             <div className="p-4 border-b border-base-200 bg-base-100 flex justify-between items-center">
+                                <h3 className="font-bold text-lg">📑 종합 세액공제 상세 계획</h3>
+                                <div className="badge badge-primary badge-outline">상세 내역</div>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="table table-sm w-full text-center border-collapse">
+                                    <thead>
+                                        <tr className="bg-base-200/60 text-base-content border-b border-base-300">
+                                            <th className="border-r border-base-300 py-3 min-w-[120px]">구분</th>
+                                            <th className="border-r border-base-300 py-3 min-w-[150px]">상세 항목</th>
+                                            {summaryYears.map(year => (
+                                                <th key={year} className="py-3 text-center border-r border-base-300 last:border-none font-bold">
+                                                    {year}
+                                                </th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {/* 1. Employment Increase Tax Credit */}
+                                        {[
+                                            { label: '1차(당해)년도 공제', key: 'credit1st', offset: 0 },
+                                            { label: '2차년도 공제', key: 'credit2nd', offset: 1 },
+                                            { label: '3차년도 공제', key: 'credit3rd', offset: 2 },
+                                            { label: '2차년도 추징', key: 'clawback1', isClawback: true },
+                                            { label: '3차년도 추징', key: 'clawback2', isClawback: true },
+                                        ].map((row, idx, arr) => (
+                                            <tr key={`emp-${idx}`} className={`hover:bg-base-100 border-b ${idx === arr.length - 1 ? 'border-b-2 border-base-content/30' : 'border-base-200'}`}>
+                                                {idx === 0 && (
+                                                    <td rowSpan={5} className="font-bold bg-base-100 border-r border-base-200 align-middle text-[14px]">
+                                                        고용증대<br/>세액공제
+                                                    </td>
+                                                )}
+                                                <td className="text-left pl-4 border-r border-base-200 text-sm font-medium bg-base-50/30">
+                                                    {row.label}
+                                                </td>
+                                                {summaryYears.map(year => {
+                                                    if (row.isClawback) {
+                                                        return <td key={year} className="bg-base-200/20 border-r border-base-200 last:border-none"></td>;
+                                                    }
+                                                    
+                                                    // Employment Increase Logic
+                                                    const res = creditResults?.employmentIncreaseResults?.find(r => r.year === year);
+                                                    const val = res ? res[row.key] : 0;
+                                                     
+                                                    // Color Logic
+                                                    const getCycleColor = (originYear) => {
+                                                        const colors = ['#F43099', '#615EFF', '#00D3BB', '#FCB700'];
+                                                        return colors[(originYear) % 4];
+                                                    };
+                                                    const originYear = year - (row.offset || 0);
+                                                    const color = val > 0 ? getCycleColor(originYear) : undefined;
+
+                                                    return (
+                                                        <td key={year} className="font-mono text-sm border-r border-base-200 last:border-none">
+                                                            {val > 0 ? (
+                                                                <span style={{ color, fontWeight: '700' }}>
+                                                                    {formatNumber(val)}
+                                                                </span>
+                                                            ) : ''}
+                                                        </td>
+                                                    );
+                                                })}
+                                            </tr>
+                                        ))}
+
+                                        {/* 2. Integrated Employment Tax Credit */}
+                                        {[
+                                            { label: '1차(당해)년도 공제', key: 'credit1st', offset: 0 },
+                                            { label: '2차년도 공제', key: 'credit2nd', offset: 1 },
+                                            { label: '3차년도 공제', key: 'credit3rd', offset: 2 },
+                                            { label: '2차년도 추징', key: 'clawback1', isClawback: true },
+                                            { label: '3차년도 추징', key: 'clawback2', isClawback: true },
+                                            { label: '추가 공제세액', key: 'additional', isClawback: true }, // Placeholder
+                                        ].map((row, idx, arr) => (
+                                            <tr key={`int-${idx}`} className={`hover:bg-base-100 border-b ${idx === arr.length - 1 ? 'border-b-2 border-base-content/30' : 'border-base-200'}`}>
+                                                {idx === 0 && (
+                                                    <td rowSpan={6} className="font-bold bg-base-100 border-r border-base-200 align-middle text-[14px]">
+                                                        통합고용<br/>세액공제
+                                                    </td>
+                                                )}
+                                                <td className="text-left pl-4 border-r border-base-200 text-sm font-medium bg-base-50/30">
+                                                    {row.label}
+                                                </td>
+                                                {summaryYears.map(year => {
+                                                    // Integrated only applies 2023+ visually in rows if we want to follow strict logic, 
+                                                    // but table structure asks for 2020-2024. Just display value if exists.
+                                                    // However, integratedEmploymentResults usually filtered by year >= 2023.
+                                                    
+                                                    // Check if row is placeholder
+                                                    if (row.isClawback) {
+                                                         // Specific style for 'Additional Credit' which is positive? No, usually empty in this logic.
+                                                         // But user asked to replicate image structure. 
+                                                         // Image shows 'gray' for non-applicable. We can leave empty.
+                                                         return <td key={year} className="bg-base-200/20 border-r border-base-200 last:border-none"></td>;
+                                                    }
+                                                    
+                                                    const res = creditResults?.integratedEmploymentResults?.find(r => r.year === year);
+                                                    const val = res ? res[row.key] : 0;
+                                                    
+                                                    // Image shows gray for pre-2023 in Integrated Section? 
+                                                    // If year < 2023, basically no integrated credit. 
+                                                    const isPreUnified = year < 2023;
+                                                    
+                                                    // Color Logic
+                                                    const getCycleColor = (originYear) => {
+                                                        const colors = ['#F43099', '#615EFF', '#00D3BB', '#FCB700'];
+                                                        return colors[(originYear) % 4];
+                                                    };
+                                                    const originYear = year - (row.offset || 0);
+                                                    const color = val > 0 ? getCycleColor(originYear) : undefined;
+
+                                                    return (
+                                                        <td key={year} className={`font-mono text-sm border-r border-base-200 last:border-none ${isPreUnified ? 'bg-base-200/30' : ''}`}>
+                                                            {val > 0 ? (
+                                                                <span style={{ color, fontWeight: '700' }}>
+                                                                    {formatNumber(val)}
+                                                                </span>
+                                                            ) : ''}
+                                                        </td>
+                                                    );
+                                                })}
+                                            </tr>
+                                        ))}
+
+                                        {/* 3. Social Insurance Tax Credit */}
+                                        {[
+                                            { label: '1차(당해)년도 공제', key: 'credit1st', offset: 0 },
+                                            { label: '2차년도 공제', key: 'credit2nd', offset: 1 },
+                                            { label: '2차년도 추징', key: 'clawback1', isClawback: true },
+                                        ].map((row, idx, arr) => (
+                                            <tr key={`soc-${idx}`} className={`hover:bg-base-100 border-b ${idx === arr.length - 1 ? 'border-b-2 border-base-content/30' : 'border-base-200'}`}>
+                                                {idx === 0 && (
+                                                    <td rowSpan={3} className="font-bold bg-base-100 border-r border-base-200 align-middle text-[14px]">
+                                                        사회보험료<br/>세액공제
+                                                    </td>
+                                                )}
+                                                <td className="text-left pl-4 border-r border-base-200 text-sm font-medium bg-base-50/30">
+                                                    {row.label}
+                                                </td>
+                                                 {summaryYears.map(year => {
+                                                    if (row.isClawback) {
+                                                        return <td key={year} className="bg-base-200/20 border-r border-base-200 last:border-none"></td>;
+                                                    }
+                                                    
+                                                    const res = socialInsuranceResults?.results?.find(r => r.year === year);
+                                                    const val = res ? res[row.key] : 0;
+                                                    
+                                                    // Color Logic
+                                                    const getCycleColor = (originYear) => {
+                                                        const colors = ['#F43099', '#615EFF']; // Social Insurance uses 2 colors
+                                                        return colors[(originYear) % 2];
+                                                    };
+                                                    const originYear = year - (row.offset || 0);
+                                                    const color = val > 0 ? getCycleColor(originYear) : undefined;
+
+                                                    return (
+                                                        <td key={year} className="font-mono text-sm border-r border-base-200 last:border-none">
+                                                            {val > 0 ? (
+                                                                <span style={{ color, fontWeight: '700' }}>
+                                                                    {formatNumber(val)}
+                                                                </span>
+                                                            ) : ''}
+                                                        </td>
+                                                    );
+                                                })}
+                                            </tr>
+                                        ))}
+
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Excluded Executives List */}
                     <ExclusionList />
 
@@ -1045,51 +1222,61 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                 </table>
                             </div>
 
+                            {/* [Integrated Employment] Transposed 3-Year Plan Table */}
                             <div className="mt-8">
                                 <h4 className="font-bold text-sm mb-4 flex items-center gap-2">
-                                    <span className="badge badge-primary badge-outline">상세</span> 3개년 공제 계획
+                                    <span className="badge badge-primary badge-outline">상세</span> 3개년 공제 계획 (최근 5년)
                                 </h4>
                                 <div className="overflow-x-auto">
                                     <div className="text-right text-sm text-base-content/60 mb-1">단위: 원</div>
                                     <table className="table table-md w-full text-center bg-base-100 border border-base-200">
                                         <thead className="bg-base-200/50 text-sm">
                                             <tr>
-                                                <th>귀속연도</th>
-                                                <th>1차년도 공제</th>
-                                                <th>2차년도 공제</th>
-                                                <th>3차년도 공제</th>
-                                                <th className="text-right pr-4">합계</th>
+                                                <th className="min-w-[100px] text-left pl-4">구분</th>
+                                                {summaryYears.slice().sort((a,b) => a-b).map(year => (
+                                                    <th key={year}>{year}년</th>
+                                                ))}
                                             </tr>
                                         </thead>
                                         <tbody>
-                                             {creditResults.integratedEmploymentResults.sort((a,b) => b.year - a.year).map((res) => {
-                                                const getCycleColor = (originYear) => {
-                                                    const colors = ['#F43099', '#615EFF', '#00D3BB', '#FCB700'];
-                                                    return colors[(originYear) % 4];
-                                                };
-                                                return (
-                                                <tr key={res.year} className="hover text-sm">
-                                                    <td className="font-bold">{res.year}년</td>
-                                                    <td className="font-mono font-bold" style={{ color: res.credit1st > 0 ? getCycleColor(res.year) : undefined }}>
-                                                        {res.credit1st > 0 ? formatNumber(res.credit1st) : <span className="opacity-20 font-normal text-base-content">-</span>}
-                                                    </td>
-                                                    <td className="font-mono font-bold" style={{ color: res.credit2nd > 0 ? getCycleColor(res.year - 1) : undefined }}>
-                                                        {res.credit2nd > 0 ? formatNumber(res.credit2nd) : <span className="opacity-20 font-normal text-base-content">-</span>}
-                                                    </td>
-                                                    <td className="font-mono font-bold" style={{ color: res.credit3rd > 0 ? getCycleColor(res.year - 2) : undefined }}>
-                                                        {res.credit3rd > 0 ? formatNumber(res.credit3rd) : <span className="opacity-20 font-normal text-base-content">-</span>}
-                                                    </td>
-                                                    <td className="font-mono font-bold text-right pr-4 bg-base-200/30 text-base">
-                                                        {formatNumber(res.totalCredit)}
-                                                    </td>
+                                            {[
+                                                { label: '1차년도 (최초)', key: 'credit1st', offset: 0 },
+                                                { label: '2차년도 (유지)', key: 'credit2nd', offset: 1 },
+                                                { label: '3차년도 (유지)', key: 'credit3rd', offset: 2 },
+                                                { label: '합 계', key: 'totalCredit', isTotal: true }
+                                            ].map((row, rIdx) => (
+                                                <tr key={rIdx} className={row.isTotal ? 'bg-base-200/30 font-bold' : 'hover text-sm'}>
+                                                    <td className={`text-left pl-4 ${row.isTotal ? 'font-extrabold' : 'font-semibold'}`}>{row.label}</td>
+                                                    {summaryYears.slice().sort((a,b) => a-b).map(year => {
+                                                        const res = creditResults.integratedEmploymentResults.find(r => r.year === year) || { credit1st: 0, credit2nd: 0, credit3rd: 0, totalCredit: 0 };
+                                                        const val = res[row.key] || 0;
+                                                        
+                                                        // Color Logic
+                                                        const getCycleColor = (originYear) => {
+                                                            const colors = ['#F43099', '#615EFF', '#00D3BB', '#FCB700'];
+                                                            return colors[(originYear) % 4];
+                                                        };
+                                                        
+                                                        // Origin year for this cell's credit: Current Year - Row Offset
+                                                        // e.g., In 2024, 2nd year credit comes from 2023 origin.
+                                                        const originYear = year - (row.offset || 0);
+                                                        const color = (!row.isTotal && val > 0) ? getCycleColor(originYear) : undefined;
+
+                                                        return (
+                                                            <td key={year} className="font-mono">
+                                                                {val > 0 ? (
+                                                                    <span style={{ color, fontWeight: row.isTotal ? '800' : '700' }}>
+                                                                        {formatNumber(val)}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="opacity-20">-</span>
+                                                                )}
+                                                            </td>
+                                                        );
+                                                    })}
                                                 </tr>
-                                             )})}
+                                            ))}
                                         </tbody>
-                                        {creditResults.integratedEmploymentResults.length === 0 && (
-                                            <tbody>
-                                                <tr><td colSpan={5} className="py-6 text-center opacity-40">공제 내역이 없습니다.</td></tr>
-                                            </tbody>
-                                        )}
                                     </table>
                                 </div>
                             </div>
@@ -1228,51 +1415,58 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                 </table>
                             </div>
 
+                            {/* [Employment Increase] Transposed 3-Year Plan Table */}
                             <div className="mt-8">
                                 <h4 className="font-bold text-sm mb-4 flex items-center gap-2">
-                                    <span className="badge badge-primary badge-outline">상세</span> 3개년 공제 계획
+                                    <span className="badge badge-primary badge-outline">상세</span> 3개년 공제 계획 (최근 5년)
                                 </h4>
                                 <div className="overflow-x-auto">
                                     <div className="text-right text-sm text-base-content/60 mb-1">단위: 원</div>
                                     <table className="table table-md w-full text-center bg-base-100 border border-base-200">
                                         <thead className="bg-base-200/50 text-sm">
                                             <tr>
-                                                <th>귀속연도</th>
-                                                <th>1차년도 공제</th>
-                                                <th>2차년도 공제</th>
-                                                <th>3차년도 공제</th>
-                                                <th className="text-right pr-4">합계</th>
+                                                <th className="min-w-[100px] text-left pl-4">구분</th>
+                                                {summaryYears.slice().sort((a,b) => a-b).map(year => (
+                                                    <th key={year}>{year}년</th>
+                                                ))}
                                             </tr>
                                         </thead>
                                         <tbody>
-                                             {creditResults.employmentIncreaseResults.sort((a,b) => b.year - a.year).map((res) => {
-                                                const getCycleColor = (originYear) => {
-                                                    const colors = ['#F43099', '#615EFF', '#00D3BB', '#FCB700'];
-                                                    return colors[(originYear) % 4];
-                                                };
-                                                return (
-                                                <tr key={res.year} className="hover text-sm">
-                                                    <td className="font-bold">{res.year}년</td>
-                                                    <td className="font-mono font-bold" style={{ color: res.credit1st > 0 ? getCycleColor(res.year) : undefined }}>
-                                                        {res.credit1st > 0 ? formatNumber(res.credit1st) : <span className="opacity-20 font-normal text-base-content">-</span>}
-                                                    </td>
-                                                    <td className="font-mono font-bold" style={{ color: res.credit2nd > 0 ? getCycleColor(res.year - 1) : undefined }}>
-                                                        {res.credit2nd > 0 ? formatNumber(res.credit2nd) : <span className="opacity-20 font-normal text-base-content">-</span>}
-                                                    </td>
-                                                    <td className="font-mono font-bold" style={{ color: res.credit3rd > 0 ? getCycleColor(res.year - 2) : undefined }}>
-                                                        {res.credit3rd > 0 ? formatNumber(res.credit3rd) : <span className="opacity-20 font-normal text-base-content">-</span>}
-                                                    </td>
-                                                    <td className="font-mono font-bold text-right pr-4 bg-base-200/30 text-base">
-                                                        {formatNumber(res.totalCredit)}
-                                                    </td>
+                                            {[
+                                                { label: '1차년도 (최초)', key: 'credit1st', offset: 0 },
+                                                { label: '2차년도 (유지)', key: 'credit2nd', offset: 1 },
+                                                { label: '3차년도 (유지)', key: 'credit3rd', offset: 2 },
+                                                { label: '합 계', key: 'totalCredit', isTotal: true }
+                                            ].map((row, rIdx) => (
+                                                <tr key={rIdx} className={row.isTotal ? 'bg-base-200/30 font-bold' : 'hover text-sm'}>
+                                                    <td className={`text-left pl-4 ${row.isTotal ? 'font-extrabold' : 'font-semibold'}`}>{row.label}</td>
+                                                    {summaryYears.slice().sort((a,b) => a-b).map(year => {
+                                                        const res = creditResults.employmentIncreaseResults.find(r => r.year === year) || { credit1st: 0, credit2nd: 0, credit3rd: 0, totalCredit: 0 };
+                                                        const val = res[row.key] || 0;
+                                                        
+                                                        // Color Logic
+                                                        const getCycleColor = (originYear) => {
+                                                            const colors = ['#F43099', '#615EFF', '#00D3BB', '#FCB700'];
+                                                            return colors[(originYear) % 4];
+                                                        };
+                                                        const originYear = year - (row.offset || 0);
+                                                        const color = (!row.isTotal && val > 0) ? getCycleColor(originYear) : undefined;
+
+                                                        return (
+                                                            <td key={year} className="font-mono">
+                                                                {val > 0 ? (
+                                                                    <span style={{ color, fontWeight: row.isTotal ? '800' : '700' }}>
+                                                                        {formatNumber(val)}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="opacity-20">-</span>
+                                                                )}
+                                                            </td>
+                                                        );
+                                                    })}
                                                 </tr>
-                                             )})}
+                                            ))}
                                         </tbody>
-                                        {creditResults.employmentIncreaseResults.length === 0 && (
-                                            <tbody>
-                                                <tr><td colSpan={5} className="py-6 text-center opacity-40">공제 내역이 없습니다.</td></tr>
-                                            </tbody>
-                                        )}
                                     </table>
                                 </div>
                             </div>
@@ -1345,13 +1539,9 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                             };
                                             
                                             // Eligibility Logic (Matches Calculation)
-                                            // 1st Year: Overall Increase > 0. (Credit generated logic handles specific youth/normal split, but checking overall is a good proxy for 'potential').
-                                            // Actually, use the `result` object if it exists. If not, check basic conditions.
+                                            // 1st Year: Overall Increase > 0.
                                             
                                             const isNewEligible = result && result.credit1st > 0;
-                                            
-                                            // 2nd Year: Current Overall >= Prev Overall (Maintenance)
-                                            // Wait, result.credit2nd comes from PREVIOUS year's generation.
                                             const is2ndEligible = result && result.credit2nd > 0;
 
                                             return (
@@ -1410,48 +1600,57 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                          </div>
                       </div>
 
-                      {/* 2. 2-Year Credit Plan */}
+                      {/* 2. [Social Insurance] Transposed 2-Year Credit Plan */}
                       <div className="mt-8">
                             <h4 className="font-bold text-sm mb-4 flex items-center gap-2">
-                                <span className="badge badge-primary badge-outline">상세</span> 2개년 공제 계획
+                                <span className="badge badge-primary badge-outline">상세</span> 2개년 공제 계획 (최근 5년)
                             </h4>
                             <div className="overflow-x-auto">
                                 <div className="text-right text-sm text-base-content/60 mb-1">단위: 원</div>
                                 <table className="table table-md w-full text-center bg-base-100 border border-base-200">
                                     <thead className="bg-base-200/50 text-sm">
                                         <tr>
-                                            <th>귀속연도</th>
-                                            <th>1차년도 공제 (신규)</th>
-                                            <th>2차년도 공제 (유지)</th>
-                                            <th className="text-right pr-4">합계</th>
+                                            <th className="min-w-[100px] text-left pl-4">구분</th>
+                                            {summaryYears.slice().sort((a,b) => a-b).map(year => (
+                                                <th key={year}>{year}년</th>
+                                            ))}
                                         </tr>
                                     </thead>
                                     <tbody>
-                                            {socialInsuranceResults.results.sort((a,b) => b.year - a.year).slice(0, 5).map((res) => {
-                                            const getCycleColor = (originYear) => {
-                                                const colors = ['#F43099', '#615EFF'];
-                                                return colors[(originYear) % 2];
-                                            };
-                                            return (
-                                            <tr key={res.year} className="hover text-sm">
-                                                <td className="font-bold">{res.year}년</td>
-                                                <td className="font-mono font-bold" style={{ color: res.credit1st > 0 ? getCycleColor(res.year) : undefined }}>
-                                                    {res.credit1st > 0 ? formatNumber(res.credit1st) : <span className="opacity-20 font-normal text-base-content">-</span>}
-                                                </td>
-                                                <td className="font-mono font-bold" style={{ color: res.credit2nd > 0 ? getCycleColor(res.year - 1) : undefined }}>
-                                                    {res.credit2nd > 0 ? formatNumber(res.credit2nd) : <span className="opacity-20 font-normal text-base-content">-</span>}
-                                                </td>
-                                                <td className="font-mono font-bold text-right pr-4 bg-base-200/30 text-base">
-                                                    {formatNumber(res.estimatedCredit)}
-                                                </td>
+                                        {[
+                                            { label: '1차년도 (신규)', key: 'credit1st', offset: 0 },
+                                            { label: '2차년도 (유지)', key: 'credit2nd', offset: 1 },
+                                            { label: '합 계', key: 'estimatedCredit', isTotal: true }
+                                        ].map((row, rIdx) => (
+                                            <tr key={rIdx} className={row.isTotal ? 'bg-base-200/30 font-bold' : 'hover text-sm'}>
+                                                <td className={`text-left pl-4 ${row.isTotal ? 'font-extrabold' : 'font-semibold'}`}>{row.label}</td>
+                                                {summaryYears.slice().sort((a,b) => a-b).map(year => {
+                                                    const res = socialInsuranceResults.results.find(r => r.year === year) || { credit1st: 0, credit2nd: 0, estimatedCredit: 0 };
+                                                    const val = res[row.key] || 0;
+                                                    
+                                                    // Color Logic
+                                                    const getCycleColor = (originYear) => {
+                                                        const colors = ['#F43099', '#615EFF'];
+                                                        return colors[(originYear) % 2];
+                                                    };
+                                                    const originYear = year - (row.offset || 0);
+                                                    const color = (!row.isTotal && val > 0) ? getCycleColor(originYear) : undefined;
+
+                                                    return (
+                                                        <td key={year} className="font-mono">
+                                                            {val > 0 ? (
+                                                                <span style={{ color, fontWeight: row.isTotal ? '800' : '700' }}>
+                                                                    {formatNumber(val)}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="opacity-20">-</span>
+                                                            )}
+                                                        </td>
+                                                    );
+                                                })}
                                             </tr>
-                                            )})}
+                                        ))}
                                     </tbody>
-                                    {socialInsuranceResults.results.length === 0 && (
-                                        <tbody>
-                                            <tr><td colSpan={4} className="py-6 text-center opacity-40">공제 내역이 없습니다.</td></tr>
-                                        </tbody>
-                                    )}
                                 </table>
                             </div>
                         </div>
