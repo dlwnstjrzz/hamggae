@@ -35,6 +35,7 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
         return {
             totalWages,
             totalAnnualizedWages,
+            totalWorkingMonths: totalMonths,
             fte: Math.floor((totalMonths / 12) * 100) / 100, // Truncate below 2nd decimal
             count
         };
@@ -193,12 +194,26 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
             const useActualWages = targetYear >= 2023;
             const getWageSum = (stats) => useActualWages ? stats.totalWages : stats.totalAnnualizedWages;
 
+            // Truncate function for Avg Wages (1000s place)
+            const truncateWage = (val) => Math.floor(val / 1000) * 1000;
+
             yearlyStats[y] = {
-                avgWage: (wageStatsStd.count > 0 && wageStatsStd.fte > 0) ? (getWageSum(wageStatsStd) / wageStatsStd.fte) : 0,
-                avgWageExcl: (wageStatsExcl.count > 0 && wageStatsExcl.fte > 0) ? (getWageSum(wageStatsExcl) / wageStatsExcl.fte) : 0,
+                avgWage: (wageStatsStd.count > 0 && wageStatsStd.fte > 0) ? truncateWage(getWageSum(wageStatsStd) / wageStatsStd.fte) : 0,
+                avgWageExcl: (wageStatsExcl.count > 0 && wageStatsExcl.fte > 0) ? truncateWage(getWageSum(wageStatsExcl) / wageStatsExcl.fte) : 0,
                 fte: Math.floor(basicStats.fte * 100) / 100,
                 totalWages: wageStatsStd.totalWages, // For display
                 count: basicStats.count, // For display
+                
+                // Detailed breakdown for formula display
+                fteNumerator: basicStats.totalWorkingMonths,
+                fteDenominator: 12,
+                
+                avgWageNumerator: getWageSum(wageStatsStd),
+                avgWageDenominator: wageStatsStd.fte,
+                
+                avgWageExclNumerator: getWageSum(wageStatsExcl),
+                avgWageExclDenominator: wageStatsExcl.fte,
+
                 names: [...new Set(validForWageStd.map(e => e.name))].sort(),
                 includedEmployees: validForWageStd, // Full objects for "Included" table
                 excludedEmployees: excludedInYear   // Full objects for "Excluded" table
@@ -288,9 +303,14 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
                 const wageSpecT = (wageT + wageT_1) / 2;
                 
                 // Step 35: Modified Avg Rate = (RateT-2 + RateT-3) / 2
-                const r2 = rateT_2 !== null ? rateT_2 : 0;
-                const r3 = rateT_3 !== null ? rateT_3 : 0;
-                const avgRateSpecPrev = (r2 + r3) / 2;
+                // Rule: If rate is negative, treat as 0. Truncate result to 4 decimal places.
+                // Note: Rate variables are decimals (0.0257). 
+                const r2 = Math.max(0, rateT_2 !== null ? rateT_2 : 0);
+                const r3 = Math.max(0, rateT_3 !== null ? rateT_3 : 0);
+                let avgRateSpecPrev = (r2 + r3) / 2;
+                
+                // Truncate to 4 decimal places (e.g. 0.0128xxxx -> 0.0128)
+                avgRateSpecPrev = Math.floor(avgRateSpecPrev * 10000) / 10000;
 
                 // Step 36: Excess = (WageSpecT - WageT-2 * (1 + AvgRateSpecPrev)) * CountT-1
                 const wageIfGrewSpec = wageT_2 * (1 + avgRateSpecPrev);

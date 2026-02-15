@@ -119,13 +119,22 @@ const IncomeCohortCard = ({ record, formatNumber }) => {
                                         </td>
                                         <td className="font-mono">
                                             {stat.fte}명
+                                            <div className="text-[10px] text-base-content/40 opacity-70 mt-0.5">
+                                                {stat.fteNumerator || 0} / {stat.fteDenominator || 12}
+                                            </div>
                                         </td>
                                         <td className="font-mono text-sm">
                                             {formatNumber(stat.avgWage)}
+                                            <div className="text-[10px] text-base-content/40 opacity-70 mt-0.5">
+                                                {formatNumber(stat.avgWageNumerator || 0)} / {(stat.avgWageDenominator || 0).toFixed(2)}
+                                            </div>
                                         </td>
                                         <td className="font-mono text-sm">
                                             <div className="tooltip" data-tip="신규 입사자를 제외한 재직자 평균임금">
                                                 {formatNumber(stat.avgWageExcl)}
+                                                <div className="text-[10px] text-base-content/40 opacity-70 mt-0.5 font-normal">
+                                                    {formatNumber(stat.avgWageExclNumerator || 0)} / {(stat.avgWageExclDenominator || 0).toFixed(2)}
+                                                </div>
                                             </div>
                                         </td>
                                         <td className="font-mono text-sm font-bold">
