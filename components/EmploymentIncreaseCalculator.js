@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { analyzeEmployee } from '@/utils/taxCorrection/employeeDataParser';
-import { calculateEmploymentIncreaseCredit } from '@/utils/taxCorrection/employmentIncrease';
-import { calculateSocialInsuranceClaims } from '@/utils/taxCorrection/socialInsurance';
-import { calculateIncomeIncreaseCredit } from '@/utils/taxCorrection/incomeIncrease';
-import { aggregateTaxCreditSummary } from '@/utils/taxCorrection/summaryHelpers';
+import { analyzeEmployee } from '../utils/taxCorrection/employeeDataParser';
+import { calculateEmploymentIncreaseCredit } from '../utils/taxCorrection/employmentIncrease';
+import { calculateSocialInsuranceClaims } from '../utils/taxCorrection/socialInsurance';
+import { calculateIncomeIncreaseCredit } from '../utils/taxCorrection/incomeIncrease';
+import { aggregateTaxCreditSummary } from '../utils/taxCorrection/summaryHelpers';
+import { generateTaxCreditExcel } from '../utils/excelGenerator';
 
-import { RiseOutlined, TeamOutlined, CalculatorOutlined, FileTextOutlined, SafetyCertificateOutlined, DollarOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import { RiseOutlined, TeamOutlined, CalculatorOutlined, FileTextOutlined, SafetyCertificateOutlined, DollarOutlined, ExclamationCircleOutlined, DownloadOutlined, ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 
 // Sub-component for individual Cohort Card to manage local state (Year Tabs)
 const IncomeCohortCard = ({ record, formatNumber }) => {
@@ -331,6 +332,154 @@ const IncomeCohortCard = ({ record, formatNumber }) => {
 
 
 
+const EmployeeListTable = ({ yearData, onUpdateExclusion, formatNumber }) => {
+    const [sortConfig, setSortConfig] = useState({ key: null, direction: 'desc' });
+
+    const handleSort = (key) => {
+        setSortConfig(current => {
+            if (current.key === key) {
+                return { key, direction: current.direction === 'asc' ? 'desc' : 'asc' };
+            }
+            return { key, direction: 'desc' };
+        });
+    };
+
+    const sortedData = React.useMemo(() => {
+        let items = [...yearData];
+        if (sortConfig.key) {
+            items.sort((a, b) => {
+                let valA = a[sortConfig.key] || 0;
+                let valB = b[sortConfig.key] || 0;
+                
+                if (sortConfig.key === 'name') {
+                    return sortConfig.direction === 'asc' 
+                        ? valA.localeCompare(valB, 'ko') 
+                        : valB.localeCompare(valA, 'ko');
+                }
+                
+                if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+                if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+        } else {
+             // Default Sort (Existing Logic)
+             items.sort((a,b) => {
+                if (a.exclusionReason && !b.exclusionReason) return 1;
+                if (!a.exclusionReason && b.exclusionReason) return -1;
+                return b.totalSalary - a.totalSalary;
+            });
+        }
+        return items;
+    }, [yearData, sortConfig]);
+
+    return (
+      <div className="overflow-x-auto">
+        <table className="table">
+            <thead>
+                <tr>
+                    <th className="w-12 text-center">No</th>
+                    <th>
+                        <div 
+                            className="flex items-center gap-1 cursor-pointer hover:bg-base-200 py-1 rounded transition-colors select-none w-fit px-2"
+                            onClick={() => handleSort('name')}
+                        >
+                            이름 / 주민번호
+                            {sortConfig.key === 'name' ? (
+                                sortConfig.direction === 'asc' ? <ArrowUpOutlined className="text-xs" /> : <ArrowDownOutlined className="text-xs" />
+                            ) : (
+                                <div className="flex flex-col text-[8px] leading-[0.5] opacity-30">
+                                    <ArrowUpOutlined />
+                                    <ArrowDownOutlined />
+                                </div>
+                            )}
+                        </div>
+                    </th>
+                    <th>입사일 / 퇴사일</th>
+                    <th className="text-right">총급여</th>
+                    <th className="text-center">청년 근속</th>
+                    <th className="text-center">
+                        <div 
+                            className="flex items-center justify-center gap-1 cursor-pointer hover:bg-base-200 py-1 rounded transition-colors select-none"
+                            onClick={() => handleSort('normalMonths')}
+                        >
+                            일반 근속
+                            {sortConfig.key === 'normalMonths' ? (
+                                sortConfig.direction === 'asc' ? <ArrowUpOutlined className="text-xs" /> : <ArrowDownOutlined className="text-xs" />
+                            ) : (
+                                <div className="flex flex-col text-[8px] leading-[0.5] opacity-30">
+                                    <ArrowUpOutlined />
+                                    <ArrowDownOutlined />
+                                </div>
+                            )}
+                        </div>
+                    </th>
+                    <th className="text-center w-40">제외사유</th>
+                </tr>
+            </thead>
+            <tbody>
+                {sortedData.map((emp, idx) => (
+                    <tr key={idx} className="hover">
+                        <th>{idx + 1}</th>
+                        <td>
+                            <div className={`font-medium ${emp.exclusionReason ? 'opacity-40 line-through' : ''}`}>
+                                {emp.name}
+                            </div>
+                            <div className="font-mono text-xs opacity-40">{emp.id}</div>
+                        </td>
+                        <td className="text-sm opacity-70">
+                            <div>{emp.hireDate}</div>
+                            <div className="opacity-60">{emp.retireDate || '-'}</div>
+                        </td>
+                        <td className={`text-right font-mono ${emp.exclusionReason ? 'opacity-40' : ''}`}>
+                            {formatNumber(emp.totalSalary)}
+                        </td>
+                        <td className="text-center text-sm">
+                            {emp.youthMonths > 0 ? (
+                                <span className={`font-bold ${emp.exclusionReason ? 'opacity-30' : ''}`}>
+                                    {emp.youthMonths}개월
+                                </span>
+                            ) : <span className="opacity-20">-</span>}
+                        </td>
+                        <td className="text-center text-sm">
+                            {emp.normalMonths > 0 ? (
+                                <span className="font-medium opacity-60">
+                                    {emp.normalMonths}개월
+                                </span>
+                            ) : <span className="opacity-20">-</span>}
+                        </td>
+                        <td className="text-center">
+                             <select 
+                                className={`select select-ghost font-normal ${emp.exclusionReason ? 'text-error font-bold' : 'text-success font-bold'}`}
+                                value={emp.exclusionReason || ''}
+                                onChange={(e) => onUpdateExclusion(emp, e.target.value || null)}
+                            >
+                                <option value="" className="text-success font-bold">포함</option>
+                                <option value="임원" className="text-error font-bold">임원</option>
+                                <option value="최대주주및가족" className="text-error font-bold">최대주주 및 친족</option>
+                                <option value="기타" className="text-base-content">계약직/기타</option>
+                            </select>
+                        </td>
+                    </tr>
+                ))}
+            </tbody>
+            <tfoot>
+                 <tr className="bg-base-200/50 font-bold border-t border-base-300">
+                     <td colSpan={2} className="text-center font-bold">합 계</td>
+                     <td colSpan={2}></td>
+                     <td className="text-center font-mono">
+                         {(sortedData.reduce((acc, emp) => acc + (emp.youthMonths || 0), 0)).toFixed(2)}
+                     </td>
+                     <td className="text-center font-mono">
+                         {(sortedData.reduce((acc, emp) => acc + (emp.normalMonths || 0), 0)).toFixed(2)}
+                     </td>
+                     <td></td>
+                 </tr>
+            </tfoot>
+        </table>
+      </div>
+  );
+};
+
 export default function EmploymentIncreaseCalculator({ initialData }) {
   const [processedData, setProcessedData] = useState([]);
   const [activeMainTab, setActiveMainTab] = useState('summary'); // 'summary', 'employment', 'social', 'income'
@@ -509,82 +658,21 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
   };
 
 
-  // 1. Employee List Table (Clean)
-  const EmployeeListTable = ({ yearData, onUpdateExclusion }) => (
-      <div className="overflow-x-auto">
-        <table className="table">
-            <thead>
-                <tr>
-                    <th className="w-12 text-center">No</th>
-                    <th>이름 / 주민번호</th>
-                    <th>입사일 / 퇴사일</th>
-                    <th className="text-right">총급여</th>
-                    <th className="text-center">청년 근속</th>
-                    <th className="text-center">일반 근속</th>
-                    <th className="text-center w-40">제외사유</th>
-                </tr>
-            </thead>
-            <tbody>
-                {yearData.sort((a,b) => {
-                        if (a.exclusionReason && !b.exclusionReason) return 1;
-                        if (!a.exclusionReason && b.exclusionReason) return -1;
-                        return b.totalSalary - a.totalSalary;
-                    }).map((emp, idx) => (
-                    <tr key={idx} className="hover">
-                        <th>{idx + 1}</th>
-                        <td>
-                            <div className={`font-medium ${emp.exclusionReason ? 'opacity-40 line-through' : ''}`}>
-                                {emp.name}
-                            </div>
-                            <div className="font-mono text-xs opacity-40">{emp.id}</div>
-                        </td>
-                        <td className="text-sm opacity-70">
-                            <div>{emp.hireDate}</div>
-                            <div className="opacity-60">{emp.retireDate || '-'}</div>
-                        </td>
-                        <td className={`text-right font-mono ${emp.exclusionReason ? 'opacity-40' : ''}`}>
-                            {formatNumber(emp.totalSalary)}
-                        </td>
-                        <td className="text-center text-sm">
-                            {emp.youthMonths > 0 ? (
-                                <span className={`font-bold ${emp.exclusionReason ? 'opacity-30' : ''}`}>
-                                    {emp.youthMonths}개월
-                                </span>
-                            ) : <span className="opacity-20">-</span>}
-                        </td>
-                        <td className="text-center text-sm">
-                            {emp.normalMonths > 0 ? (
-                                <span className="font-medium opacity-60">
-                                    {emp.normalMonths}개월
-                                </span>
-                            ) : <span className="opacity-20">-</span>}
-                        </td>
-                        <td className="text-center">
-                             <select 
-                                className={`select select-ghost font-normal ${emp.exclusionReason ? 'text-error font-bold' : 'text-success font-bold'}`}
-                                value={emp.exclusionReason || ''}
-                                onChange={(e) => onUpdateExclusion(emp, e.target.value || null)}
-                            >
-                                <option value="" className="text-success font-bold">포함</option>
-                                <option value="임원" className="text-error font-bold">임원</option>
-                                <option value="최대주주및가족" className="text-error font-bold">최대주주 및 친족</option>
-                                <option value="기타" className="text-base-content">계약직/기타</option>
-                            </select>
-                        </td>
-                    </tr>
-                ))}
-            </tbody>
-        </table>
-      </div>
-  );
+
 
   // 2. Filtered Exclusions List
   const ExclusionList = () => {
       if (!processedData.some(d => d.exclusionReason)) return null;
-      
-      const excludedIds = new Set(processedData.filter(d => d.exclusionReason).map(d => d.id));
-      const grouped = {};
       const allYears = [...new Set(processedData.map(d => d.year))].sort((a,b) => a-b);
+      
+      const excludedIds = new Set();
+      const grouped = {};
+      
+      processedData.forEach(d => {
+          if (d.exclusionReason) {
+              excludedIds.add(d.id);
+          }
+      });
 
       processedData.forEach(d => {
           if (excludedIds.has(d.id)) { 
@@ -698,24 +786,35 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
 
             {/* Recalculate Button Area */}
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                 <div className="tabs tabs-box">
-                     {[
-                         { id: 'summary', icon: <FileTextOutlined />, label: '최종 집계' },
-                         { id: 'employment', icon: <TeamOutlined />, label: '고용증대' },
-                         { id: 'social', icon: <SafetyCertificateOutlined />, label: '사회보험' },
-                         { id: 'income', icon: <DollarOutlined />, label: '근로소득' },
-                     ].map(tab => (
-                         <input 
-                             key={tab.id}
-                             defaultChecked={tab.id === 'summary'}
-                             type="radio"
-                             name="my_tabs_1"
-                             className="tab"
-                             aria-label={tab.label}
-                             onChange={() => setActiveMainTab(tab.id)}
-                         />
-                     ))}
-                 </div>
+              <div className="flex justify-between items-center mb-6">
+                  <div className="tabs tabs-box">
+                      {[
+                          { id: 'summary', icon: <FileTextOutlined />, label: '최종 집계' },
+                          { id: 'integrated', icon: <TeamOutlined />, label: '통합고용' },
+                          { id: 'employment', icon: <TeamOutlined />, label: '고용증대' },
+                          { id: 'social', icon: <SafetyCertificateOutlined />, label: '사회보험' },
+                          { id: 'income', icon: <DollarOutlined />, label: '근로소득' },
+                      ].map(tab => (
+                          <input 
+                              key={tab.id}
+                              defaultChecked={tab.id === 'summary'}
+                              type="radio"
+                              name="my_tabs_1"
+                              className="tab"
+                              aria-label={tab.label}
+                              onChange={() => setActiveMainTab(tab.id)}
+                          />
+                      ))}
+                  </div>
+                  
+                  <button 
+                      className="btn btn-primary btn-sm gap-2"
+                      onClick={() => generateTaxCreditExcel(processedData, incomeIncreaseResults)}
+                  >
+                      <DownloadOutlined />
+                      소명자료 다운로드 (Excel)
+                  </button>
+              </div>
                  
                  <div className="flex gap-2">
                      <div 
@@ -813,6 +912,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                  <EmployeeListTable 
                                      yearData={yearData} 
                                      onUpdateExclusion={updateExclusion}
+                                     formatNumber={formatNumber}
                                  />
                              )}
                          </YearTabs>
@@ -820,14 +920,14 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                 </div>
             )}
 
-            {/* TAB 2: EMPLOYMENT INCREASE */}
-            {activeMainTab === 'employment' && creditResults && (
+            {/* TAB 2: INTEGRATED EMPLOYMENT (2023+) */}
+            {activeMainTab === 'integrated' && creditResults && (
                 <div className="space-y-8 animate-in fade-in">
                      {/* Calculation Result Table */}
                      <div className="card shadow-sm bg-base-100 border border-base-200">
                              <div className="card-body p-6">
                             <h3 className="card-title mb-6 flex items-center justify-between">
-                                <span>💰 고용증대 세액공제 계산 결과</span>
+                                <span>💰 통합고용 세액공제 계산 결과 (2023년 이후)</span>
                                 <div className="badge badge-ghost text-sm font-normal">청년 등 / 청년 외 구분</div>
                             </h3>
                             
@@ -851,7 +951,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {creditResults.annualAverages.sort((a,b) => b.year - a.year).slice(0, 7).map((stat) => {
+                                        {creditResults.annualAverages.filter(stat => stat.year >= 2023).sort((a,b) => b.year - a.year).map((stat) => {
                                             const result = creditResults.results.find(r => r.year === stat.year);
                                             const prevStat = creditResults.annualAverages.find(r => r.year === stat.year - 1);
                                             
@@ -928,6 +1028,9 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                                 </tr>
                                             );
                                         })}
+                                        {creditResults.annualAverages.filter(stat => stat.year >= 2023).length === 0 && (
+                                            <tr><td colSpan={8} className="py-10 text-center opacity-40">2023년 이후 데이터가 없습니다.</td></tr>
+                                        )}
                                     </tbody>
                                 </table>
                             </div>
@@ -949,7 +1052,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                             {creditResults.results.sort((a,b) => b.year - a.year).slice(0, 5).map((res) => {
+                                             {creditResults.results.filter(res => res.year >= 2023).sort((a,b) => b.year - a.year).map((res) => {
                                                 const getCycleColor = (originYear) => {
                                                     const colors = ['#F43099', '#615EFF', '#00D3BB', '#FCB700'];
                                                     return colors[(originYear) % 4];
@@ -972,7 +1075,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                                 </tr>
                                              )})}
                                         </tbody>
-                                        {creditResults.results.length === 0 && (
+                                        {creditResults.results.filter(res => res.year >= 2023).length === 0 && (
                                             <tbody>
                                                 <tr><td colSpan={5} className="py-6 text-center opacity-40">공제 내역이 없습니다.</td></tr>
                                             </tbody>
@@ -986,11 +1089,194 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                      {/* Regular Employee List */}
                      <div className="mt-8">
                          <h3 className="font-bold text-md mb-4 px-2">연도별 상시근로자 리스트</h3>
-                          <YearTabs data={processedData}>
+                          <YearTabs data={processedData.filter(d => d.year >= 2023)}>
                              {(year, yearData) => (
                                  <EmployeeListTable 
                                      yearData={yearData} 
                                      onUpdateExclusion={updateExclusion}
+                                     formatNumber={formatNumber}
+                                 />
+                             )}
+                         </YearTabs>
+                     </div>
+                </div>
+            )}
+
+            {/* TAB 3: EMPLOYMENT INCREASE (< 2023) */}
+            {activeMainTab === 'employment' && creditResults && (
+                <div className="space-y-8 animate-in fade-in">
+                     {/* Calculation Result Table */}
+                     <div className="card shadow-sm bg-base-100 border border-base-200">
+                             <div className="card-body p-6">
+                            <h3 className="card-title mb-6 flex items-center justify-between">
+                                <span>💰 고용증대 세액공제 계산 결과 (2022년 이전)</span>
+                                <div className="badge badge-ghost text-sm font-normal">청년 등 / 청년 외 구분</div>
+                            </h3>
+                            
+                            <div className="overflow-x-auto">
+                                <div className="text-right text-sm text-base-content/60 mb-1">단위: 원, 명</div>
+                                <table className="table md:table-md w-full text-center">
+                                    <thead>
+                                        <tr>
+                                            <th rowSpan={2} className="border-r border-base-200 text-center w-20">과세<br/>연도</th>
+                                            <th colSpan={3} className="border-r border-base-200">상시근로자 수 (명)</th>
+                                            <th colSpan={3} className="border-r border-base-200">총 급여 (원)</th>
+                                            <th rowSpan={2} className="bg-base-200/30 font-bold min-w-[180px]">공제 요건 충족 여부</th>
+                                        </tr>
+                                        <tr>
+                                            <th className="text-sm">청년 등</th>
+                                            <th className="text-sm">청년 외</th>
+                                            <th className="border-r border-base-200 font-bold text-sm">전체</th>
+                                            <th className="text-primary text-sm">청년 급여</th>
+                                            <th className="text-sm">청년 외 급여</th>
+                                            <th className="border-r border-base-200 font-bold text-sm">전체 급여</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {creditResults.annualAverages.filter(stat => stat.year < 2023).sort((a,b) => b.year - a.year).map((stat) => {
+                                            const result = creditResults.results.find(r => r.year === stat.year);
+                                            const prevStat = creditResults.annualAverages.find(r => r.year === stat.year - 1);
+                                            
+                                            // Calculate YoY Differences
+                                            const diffYouth = prevStat ? stat.youthCount - prevStat.youthCount : 0;
+                                            const diffNormal = prevStat ? stat.normalCount - prevStat.normalCount : 0;
+                                            const diffOverall = prevStat ? stat.overallCount - prevStat.overallCount : 0;
+
+                                            const renderDiff = (val) => {
+                                                if (!prevStat) return <span className="text-xs opacity-30 block">-</span>;
+                                                if (Math.abs(val) < 0.01) return <span className="text-xs opacity-30 block">-</span>;
+                                                const color = val > 0 ? 'text-primary' : 'text-error';
+                                                const sign = val > 0 ? '+' : '';
+                                                return <span className={`text-xs font-bold block ${color}`}>({sign}{val.toFixed(2)})</span>;
+                                            };
+
+                                            // Conditions Logic
+                                            const isNewEligible = result && result.credit1st > 0;
+                                            const is2ndEligible = result && result.credit2nd > 0;
+                                            const is3rdEligible = result && result.credit3rd > 0;
+
+                                            return (
+                                                <tr key={stat.year} className="hover text-sm">
+                                                    <td className="font-bold bg-base-100">{stat.year}</td>
+                                                    <td className="font-mono text-primary font-bold">
+                                                        {stat.youthCount.toFixed(2)}
+                                                        {renderDiff(diffYouth)}
+                                                    </td>
+                                                    <td className="font-mono">
+                                                        {stat.normalCount.toFixed(2)}
+                                                        {renderDiff(diffNormal)}
+                                                    </td>
+                                                    <td className="font-mono font-bold border-r border-base-200">
+                                                        {stat.overallCount.toFixed(2)}
+                                                        {renderDiff(diffOverall)}
+                                                    </td>
+                                                    <td className="font-mono text-sm text-primary/80">{formatNumber(stat.totalYouthSalary)}</td>
+                                                    <td className="font-mono text-sm text-base-content">{formatNumber(stat.totalNormalSalary)}</td>
+                                                    <td className="font-mono text-sm text-base-content font-bold border-r border-base-200">{formatNumber(stat.totalYouthSalary + stat.totalNormalSalary)}</td>
+                                                    <td className="text-center p-2 align-middle">
+                                                        {!isNewEligible && !is2ndEligible && !is3rdEligible ? (
+                                                            <div className="text-sm opacity-40">
+                                                                {diffOverall < 0 ? <span className="text-error">인원감소</span> : '공제정보 없음'}
+                                                            </div>
+                                                        ) : (
+                                                            <div className="grid grid-cols-3 gap-0 border border-base-200 rounded-md overflow-hidden bg-white mx-auto max-w-[200px]">
+                                                                {/* 1차 (신규) */}
+                                                                <div className={`flex flex-col items-center justify-center p-1.5 border-r border-base-200 ${isNewEligible ? 'bg-primary/5' : ''}`}>
+                                                                    <span className="text-[9px] opacity-50 mb-0.5">1차(신규)</span>
+                                                                    {isNewEligible ? 
+                                                                        <div className="text-primary font-bold text-sm tracking-tight">증가</div> : 
+                                                                        <div className="text-base-content/20 text-sm">-</div>
+                                                                    }
+                                                                </div>
+                                                                {/* 2차 (유지) */}
+                                                                <div className={`flex flex-col items-center justify-center p-1.5 border-r border-base-200 ${is2ndEligible ? 'bg-primary/5' : ''}`}>
+                                                                    <span className="text-[9px] opacity-50 mb-0.5">2차(유지)</span>
+                                                                    {is2ndEligible ? 
+                                                                        <div className="text-base-content font-bold text-sm tracking-tight">유지</div> : 
+                                                                        <div className="text-base-content/20 text-sm">-</div>
+                                                                    }
+                                                                </div>
+                                                                {/* 3차 (유지) */}
+                                                                <div className={`flex flex-col items-center justify-center p-1.5 ${is3rdEligible ? 'bg-primary/5' : ''}`}>
+                                                                    <span className="text-[9px] opacity-50 mb-0.5">3차(유지)</span>
+                                                                    {is3rdEligible ? 
+                                                                        <div className="text-base-content font-bold text-sm tracking-tight">유지</div> : 
+                                                                        <div className="text-base-content/20 text-sm">-</div>
+                                                                    }
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                        {creditResults.annualAverages.filter(stat => stat.year < 2023).length === 0 && (
+                                            <tr><td colSpan={8} className="py-10 text-center opacity-40">2022년 이전 데이터가 없습니다.</td></tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <div className="mt-8">
+                                <h4 className="font-bold text-sm mb-4 flex items-center gap-2">
+                                    <span className="badge badge-primary badge-outline">상세</span> 3개년 공제 계획
+                                </h4>
+                                <div className="overflow-x-auto">
+                                    <div className="text-right text-sm text-base-content/60 mb-1">단위: 원</div>
+                                    <table className="table table-md w-full text-center bg-base-100 border border-base-200">
+                                        <thead className="bg-base-200/50 text-sm">
+                                            <tr>
+                                                <th>귀속연도</th>
+                                                <th>1차년도 공제</th>
+                                                <th>2차년도 공제</th>
+                                                <th>3차년도 공제</th>
+                                                <th className="text-right pr-4">합계</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                             {creditResults.results.filter(res => res.year < 2023).sort((a,b) => b.year - a.year).map((res) => {
+                                                const getCycleColor = (originYear) => {
+                                                    const colors = ['#F43099', '#615EFF', '#00D3BB', '#FCB700'];
+                                                    return colors[(originYear) % 4];
+                                                };
+                                                return (
+                                                <tr key={res.year} className="hover text-sm">
+                                                    <td className="font-bold">{res.year}년</td>
+                                                    <td className="font-mono font-bold" style={{ color: res.credit1st > 0 ? getCycleColor(res.year) : undefined }}>
+                                                        {res.credit1st > 0 ? formatNumber(res.credit1st) : <span className="opacity-20 font-normal text-base-content">-</span>}
+                                                    </td>
+                                                    <td className="font-mono font-bold" style={{ color: res.credit2nd > 0 ? getCycleColor(res.year - 1) : undefined }}>
+                                                        {res.credit2nd > 0 ? formatNumber(res.credit2nd) : <span className="opacity-20 font-normal text-base-content">-</span>}
+                                                    </td>
+                                                    <td className="font-mono font-bold" style={{ color: res.credit3rd > 0 ? getCycleColor(res.year - 2) : undefined }}>
+                                                        {res.credit3rd > 0 ? formatNumber(res.credit3rd) : <span className="opacity-20 font-normal text-base-content">-</span>}
+                                                    </td>
+                                                    <td className="font-mono font-bold text-right pr-4 bg-base-200/30 text-base">
+                                                        {formatNumber(res.totalCredit)}
+                                                    </td>
+                                                </tr>
+                                             )})}
+                                        </tbody>
+                                        {creditResults.results.filter(res => res.year < 2023).length === 0 && (
+                                            <tbody>
+                                                <tr><td colSpan={5} className="py-6 text-center opacity-40">공제 내역이 없습니다.</td></tr>
+                                            </tbody>
+                                        )}
+                                    </table>
+                                </div>
+                            </div>
+                         </div>
+                      </div>
+                     
+                     {/* Regular Employee List */}
+                     <div className="mt-8">
+                         <h3 className="font-bold text-md mb-4 px-2">연도별 상시근로자 리스트</h3>
+                          <YearTabs data={processedData.filter(d => d.year < 2023)}>
+                             {(year, yearData) => (
+                                 <EmployeeListTable 
+                                     yearData={yearData} 
+                                     onUpdateExclusion={updateExclusion}
+                                     formatNumber={formatNumber}
                                  />
                              )}
                          </YearTabs>
@@ -1206,6 +1492,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                  <EmployeeListTable 
                                      yearData={yearData} 
                                      onUpdateExclusion={updateExclusion}
+                                     formatNumber={formatNumber}
                                  />
                              )}
                          </YearTabs>
