@@ -56,14 +56,14 @@ function calculateAnnualAverages(employeeData) {
         // 전체 월수
         const totalMonths = stat.totalYouthMonths + stat.totalNormalMonths;
 
-        // 1. 전체 상시근로자 수 = (전체 월수 / 12) 후 소수점 2자리 남기고 버림
-        stat.overallCount = truncateTo2Decimals(totalMonths / 12);
-
-        // 2. 청년 상시근로자 수 = (청년 월수 / 12) 후 소수점 2자리 남기고 버림
+        // 1. 청년 상시근로자 수 = (청년 월수 / 12) 후 소수점 2자리 남기고 버림
         stat.youthCount = truncateTo2Decimals(stat.totalYouthMonths / 12);
 
-        // 3. 청년 외(기타) 상시근로자 수 = (청년 외 월수 / 12) 후 소수점 2자리 남기고 버림
+        // 2. 청년 외(기타) 상시근로자 수 = (청년 외 월수 / 12) 후 소수점 2자리 남기고 버림
         stat.normalCount = truncateTo2Decimals(stat.totalNormalMonths / 12);
+        
+        // 3. 전체 상시근로자 수 = 청년 상시근로자 수 + 청년 외 상시근로자 수
+        stat.overallCount = Number((stat.youthCount + stat.normalCount).toFixed(2));
         
         stat.totalMonths = totalMonths; // UI 표시용 추가
 

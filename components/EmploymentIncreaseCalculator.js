@@ -530,7 +530,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
 
       const normalizeName = (name) => {
           if (!name) return '';
-          return name.replace(/\(.*\)/g, '').replace(/[0-9]/g, '').trim();
+          return name.replace(/\(.*\)/g, '').replace(/[0-9]/g, '').replace(/\s/g, '');
       };
 
       allEmployees = allEmployees.map(emp => {

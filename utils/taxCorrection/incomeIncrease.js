@@ -17,12 +17,16 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
         let totalWages = 0;
         let totalAnnualizedWages = 0;
         let totalMonths = 0;
+        let totalYouthMonths = 0;
+        let totalNormalMonths = 0;
         let count = 0;
 
         employees.forEach(emp => {
             totalWages += emp.totalSalary;
             const workingMonths = calculateWorkingMonths(emp, year);
             totalMonths += workingMonths;
+            totalYouthMonths += (emp.youthMonths || 0);
+            totalNormalMonths += (emp.normalMonths || 0);
             count++;
 
             // User Requirement: Annualize wage for calculating average wage
@@ -32,11 +36,14 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
             }
         });
 
+        const fteYouth = Math.floor((totalYouthMonths / 12) * 100) / 100;
+        const fteNormal = Math.floor((totalNormalMonths / 12) * 100) / 100;
+
         return {
             totalWages,
             totalAnnualizedWages,
             totalWorkingMonths: totalMonths,
-            fte: Math.floor((totalMonths / 12) * 100) / 100, // Truncate below 2nd decimal
+            fte: Number((fteYouth + fteNormal).toFixed(2)), // Truncate youth/normal separately, then sum
             count
         };
     };

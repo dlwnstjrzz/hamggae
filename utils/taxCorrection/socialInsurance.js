@@ -48,14 +48,14 @@ function calculateAnnualStats(employeeData) {
         
         const totalMonths = stat.totalYouthMonths + stat.totalNormalMonths;
 
-        // 1. Overall Constant Employee Count
-        stat.overallCount = truncateTo2Decimals(totalMonths / 12);
-
-        // 2. Youth Constant Employee Count
+        // 1. Youth Constant Employee Count
         stat.youthCount = truncateTo2Decimals(stat.totalYouthMonths / 12);
 
-        // 3. Normal (Non-Youth) Constant Employee Count
+        // 2. Normal (Non-Youth) Constant Employee Count
         stat.normalCount = truncateTo2Decimals(stat.totalNormalMonths / 12);
+
+        // 3. Overall Constant Employee Count = Youth + Normal
+        stat.overallCount = Number((stat.youthCount + stat.normalCount).toFixed(2));
 
         return stat;
     });

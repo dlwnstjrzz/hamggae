@@ -153,17 +153,35 @@ function analyzeYouthStatus(name, id, hireDate, retireDate, row, salaryStartCol,
           if (age <= 29) isYouth = true;
       }
 
-      // Employment Status at Month End (Use String Comparison to avoid Timezone issues)
+      // Employment Status at Month End (Must be employed on the exact last day of the month)
       let isEmployedAtMonthEnd = false;
       
-      const monthEndStr = monthEnd.toISOString().split('T')[0];
-      const hDateStr = hDate ? hDate.toISOString().split('T')[0] : null;
-      const rDateStr = rDate ? rDate.toISOString().split('T')[0] : null;
-
-      if (hDateStr && hDateStr <= monthEndStr) {
-          if (!rDateStr || rDateStr >= monthEndStr) {
-              isEmployedAtMonthEnd = true;
+      const isHiredBeforeOrOnMonthEnd = hDate && (hDate.getFullYear() < year || (hDate.getFullYear() === year && hDate.getMonth() + 1 <= m));
+      
+      // Check if they retired before the end of this month
+      let retiredBeforeMonthEnd = false;
+      if (rDate) {
+          const rYear = rDate.getFullYear();
+          const rMonth = rDate.getMonth() + 1;
+          const rDay = rDate.getDate();
+          
+          if (rYear < year) {
+              retiredBeforeMonthEnd = true;
+          } else if (rYear === year) {
+              if (rMonth < m) {
+                  retiredBeforeMonthEnd = true;
+              } else if (rMonth === m) {
+                  // Retired IN this month. Must retire exactly ON the last day of the month to be counted
+                  const lastDayOfMonth = new Date(year, m, 0).getDate();
+                  if (rDay < lastDayOfMonth) {
+                      retiredBeforeMonthEnd = true;
+                  }
+              }
           }
+      }
+
+      if (isHiredBeforeOrOnMonthEnd && !retiredBeforeMonthEnd) {
+          isEmployedAtMonthEnd = true;
       }
 
       // Aggregate
@@ -289,17 +307,34 @@ function calculateEmployeeTaxStatus(name, id, hireDate, retireDate, empObj, year
             if (age <= 29) isYouth = true;
         }
   
-        // Employment Status (Use String Comparison)
+        // Employment Status (Must be employed on the exact last day of the month)
         let isEmployedAtMonthEnd = false;
         
-        const monthEndStr = monthEnd.toISOString().split('T')[0];
-        const hDateStr = hireDate ? hireDate.toISOString().split('T')[0] : null;
-        const rDateStr = retireDate ? retireDate.toISOString().split('T')[0] : null;
-
-        if (hDateStr && hDateStr <= monthEndStr) {
-            if (!rDateStr || rDateStr >= monthEndStr) {
-                isEmployedAtMonthEnd = true;
+        const isHiredBeforeOrOnMonthEnd = hireDate && (hireDate.getFullYear() < year || (hireDate.getFullYear() === year && hireDate.getMonth() + 1 <= m));
+        
+        let retiredBeforeMonthEnd = false;
+        if (retireDate) {
+            const rYear = retireDate.getFullYear();
+            const rMonth = retireDate.getMonth() + 1;
+            const rDay = retireDate.getDate();
+            
+            if (rYear < year) {
+                retiredBeforeMonthEnd = true;
+            } else if (rYear === year) {
+                if (rMonth < m) {
+                    retiredBeforeMonthEnd = true;
+                } else if (rMonth === m) {
+                    // Retired IN this month. Must retire exactly ON the last day of the month to be counted
+                    const lastDayOfMonth = new Date(year, m, 0).getDate();
+                    if (rDay < lastDayOfMonth) {
+                        retiredBeforeMonthEnd = true;
+                    }
+                }
             }
+        }
+
+        if (isHiredBeforeOrOnMonthEnd && !retiredBeforeMonthEnd) {
+            isEmployedAtMonthEnd = true;
         }
   
         // Aggregation

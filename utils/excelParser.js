@@ -14,7 +14,38 @@ export async function parseExcel(file) {
     // Check if sheet name matches year format
     const yearMatch = sheetName.match(/^(\d{4})$/);
     if (!yearMatch) {
-        console.log(`[DEBUG] Skipping sheet "${sheetName}" (not a year)`);
+        if (sheetName === '임원명단') {
+            const executives = [];
+            const headerRow = worksheet.getRow(1);
+            worksheet.eachRow((row, rowNumber) => {
+                if (rowNumber === 1) return; // 헤더 제외
+                const name = row.getCell(2).value;
+                if (!name) return;
+                
+                let startDate = row.getCell(4).value;
+                if (startDate instanceof Date) startDate = startDate.toISOString().split('T')[0];
+                let endDate = row.getCell(5).value;
+                if (endDate === '재직 중' || !endDate) endDate = null;
+                else if (endDate instanceof Date) endDate = endDate.toISOString().split('T')[0];
+
+                executives.push({
+                    position: row.getCell(1).value,
+                    name: String(name),
+                    id: String(row.getCell(3).value || ''),
+                    startDate: startDate ? String(startDate) : null,
+                    endDate: endDate ? String(endDate) : null,
+                    history: []
+                });
+            });
+            results.push({
+                type: 'registry',
+                filename: '통합엑셀_임원정보',
+                executives
+            });
+            console.log(`[DEBUG] Parsed ${executives.length} executives from '임원명단'`);
+        } else {
+            console.log(`[DEBUG] Skipping sheet "${sheetName}" (not a year or relevant sheet)`);
+        }
         return;
     }
 

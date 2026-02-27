@@ -146,9 +146,8 @@ export async function processRegistryPDF(pdf, filename) {
 
       // 임원 패턴: [직위] [이름] [주민번호]
       // 예: 사내이사 홍길동 123456-*******
-      // 예: 대표이사 홍길동 123456-*******
-      // 예: 감사 홍길동 123456-*******
-      const execMatch = line.match(/(사내이사|사외이사|감사|대표이사|이사)\s+([가-힣]+)\s+(\d{6}-[\d*]{7})/);
+      // 직위가 더 길거나 (공동대표이사, 기타비상무이사 등), 띄어쓰기가 없을 수도 있음
+      const execMatch = line.match(/(사내이사|사외이사|감사|대표이사|공동대표이사|이사|기타비상무이사|감사위원)\s*([^0-9]+?)\s+(\d{6}-[\d*]{7})/);
       
       if (execMatch) {
         // 새로운 임원 발견 -> 이전 임원 저장
@@ -164,7 +163,7 @@ export async function processRegistryPDF(pdf, filename) {
       } else if (currentExec) {
         // 날짜 및 이벤트 파싱
         // 2014 년 06 월 26 일 취임
-        const dateMatch = line.match(/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일\s*(취임|중임|사임|퇴임|만료)/);
+        const dateMatch = line.match(/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일\s*(취임|중임|사임|퇴임|만료|해임)/);
         if (dateMatch) {
           currentExec.history.push({
             date: `${dateMatch[1]}-${dateMatch[2].padStart(2,'0')}-${dateMatch[3].padStart(2,'0')}`,
