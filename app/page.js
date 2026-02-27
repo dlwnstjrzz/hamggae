@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
-import { Upload, Button, Layout, Typography, Card, App, Steps, Divider, Space, Tag, Tabs } from 'antd';
-import { InboxOutlined, FilePdfOutlined, DeleteOutlined, RocketOutlined, DownloadOutlined, ReloadOutlined, CheckCircleOutlined, FileExcelOutlined } from '@ant-design/icons';
+import { Upload, Button, Layout, Typography, Card, App, Steps, Divider, Space, Tag, Tabs, Input } from 'antd';
+import { InboxOutlined, FilePdfOutlined, DeleteOutlined, RocketOutlined, DownloadOutlined, ReloadOutlined, CheckCircleOutlined, FileExcelOutlined, LockOutlined } from '@ant-design/icons';
 import { processPDF, generateExcel } from '@/utils/pdfProcessor';
 import { parseExcel } from '@/utils/excelParser';
 import EmploymentIncreaseCalculator from '@/components/EmploymentIncreaseCalculator';
@@ -14,6 +14,8 @@ const { Dragger } = Upload;
 
 export default function Home() {
   const { message } = App.useApp();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
   const [files, setFiles] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processedData, setProcessedData] = useState(null);
@@ -280,6 +282,52 @@ export default function Home() {
       ),
     },
   ];
+
+  const handlePasswordSubmit = (e) => {
+      e?.preventDefault();
+      if (passwordInput === '990730') {
+          setIsAuthenticated(true);
+      } else {
+          message.error('비밀번호가 일치하지 않습니다.');
+      }
+  };
+
+  if (!isAuthenticated) {
+      return (
+          <Layout className="min-h-screen mt-40 flex items-center justify-center p-24">
+              <Card className="w-full max-w-md shadow-lg rounded-2xl border-0 p-4">
+                  <div className="text-center mb-8 mt-4">
+                      <div className="mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-4">
+                          <LockOutlined className="text-2xl text-slate-500" />
+                      </div>
+                      <h2 className="text-2xl font-bold tracking-tight text-slate-900 mb-2">접속 권한 확인</h2>
+                      <p className="text-slate-500">프로그램을 사용하려면 비밀번호를 입력해주세요.</p>
+                  </div>
+                  <form onSubmit={handlePasswordSubmit} className="space-y-4">
+                      <div>
+                          <Input.Password
+                              size="large"
+                              placeholder="비밀번호를 입력해주세요"
+                              value={passwordInput}
+                              onChange={(e) => setPasswordInput(e.target.value)}
+                              className="h-12 [&_input]:text-center"
+                              autoFocus
+                          />
+                      </div>
+                      <Button 
+                          type="primary" 
+                          htmlType="submit" 
+                          block 
+                          size="large"
+                          className="h-12 bg-slate-900 hover:bg-slate-800 shadow-md"
+                      >
+                          접속하기
+                      </Button>
+                  </form>
+              </Card>
+          </Layout>
+      );
+  }
 
   return (
     <Layout className="relative bg-white" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
