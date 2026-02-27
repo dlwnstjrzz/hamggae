@@ -13,9 +13,7 @@ export async function sendFilesToSupabase(files) {
             let encodedName = btoa(encodeURIComponent(fileName)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
             
             // Supabase/OS의 파일명 길이 제한(통상 255바이트)을 대비해 인코딩된 이름이 너무 길면 잘라냅니다.
-            if (encodedName.length > 150) {
-                encodedName = encodedName.substring(0, 150);
-            }
+        
 
             const uniqueFileName = `${Date.now()}_${encodedName}.pdf`;
             
