@@ -15,6 +15,8 @@ export async function generateExcel(results) {
   });
 
   // 1.5 임원 필터링 (등기부 임원은 원천징수부에서 제외)
+  // [2026-02-20 Update] 사용자가 통합 자료 엑셀에는 임원도 포함되기를 원하므로 해당 필터링 무효화
+  /*
   // 임원 재직 기간 정보 구축
   const executiveTenures = [];
   registryResults.forEach(reg => {
@@ -82,6 +84,7 @@ export async function generateExcel(results) {
           console.log(`-> ${targetYear}년 총 ${originalCount}명 중 ${originalCount - res.employees.length}명(임원) 제외됨.`);
       }
   });
+  */
 
   // 2. 원천징수부 데이터 처리 (기존 로직)
   const dataByYear = {};

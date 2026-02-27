@@ -102,9 +102,20 @@ function calculateCreditAmounts(annualStats, settings) {
 // Logic B: Integrated Employment Credit (New System - From 2023)
 function calculateIntegratedCredit(annualStats, settings) {
     // Deduction Rates (Unit: 10,000 KRW)
-    // User Requested: Youth 14.5m (1450), Others 8.5m (850)
-    let youthRate = 1450;
-    let otherRate = 850;
+    let youthRate = 0;
+    let otherRate = 0;
+
+    if (settings.size === 'small') {
+        youthRate = 1450;
+        otherRate = 850;
+    } else if (settings.size === 'middle') {
+        youthRate = 800;
+        otherRate = 450;
+    } else {
+        // Large
+        youthRate = 400;
+        otherRate = 0;
+    }
 
     // Filter stats to only include 2023 and onwards for *Generation* of credit.
     // However, to calculate increase in 2023, we need 2022 data. 

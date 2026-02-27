@@ -506,6 +506,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
 
   // Processing Status
   const [isCalculated, setIsCalculated] = useState(false);
+  const [showClawback, setShowClawback] = useState(false);
 
   // 1. Initial Data Processing
   useEffect(() => {
@@ -630,6 +631,95 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
 
   const formatNumber = (value) => {
       return new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 0 }).format(value);
+  };
+
+  const getClawbackData = () => {
+      if (!creditResults || !creditResults.annualAverages || !creditResults.employmentIncreaseResults) return [];
+      
+      const averages = creditResults.annualAverages;
+      const results = creditResults.employmentIncreaseResults;
+      
+      let youthRate = 0;
+      let otherRate = 0;
+      if (settings.size === 'small') {
+          if (settings.region === 'capital') { youthRate = 1100; otherRate = 700; } 
+          else { youthRate = 1200; otherRate = 770; }
+      } else if (settings.size === 'middle') {
+          youthRate = 800; otherRate = 450;
+      }
+      youthRate *= 10000;
+      otherRate *= 10000;
+
+      const clawbacks = [];
+      const years = [...new Set(results.map(r => r.year))].sort((a,b) => a-b);
+      
+      // 최근 5년에 해당하는 연도의 시작 기준 계산 (예: summaryYears 가 [2020, 2021, 2022, 2023, 2024]라면 2020년이 기준)
+      // summaryYears 자체가 파일 하단에서 recentSummaryData를 통해 만들어짐에 따라 이를 직접 참조하기보다
+      // averages(annualStats)의 최신 연도를 기준으로 5년 (최근 연도 - 4) 값을 추출하여 필터링합니다.
+      const latestYear = Math.max(...averages.map(a => a.year));
+      const minTargetYear = latestYear - 4;
+
+      years.forEach(originYear => {
+          if (originYear < minTargetYear) return; // 5년 이내 자료만 사후관리 필터링
+          
+          const originStat = averages.find(a => a.year === originYear);
+          const originRes = results.find(r => r.year === originYear);
+          if (!originStat || !originRes || !originRes.credit1st || originRes.credit1st <= 0) return;
+          
+          const maxAmount = originRes.credit1st;
+          
+          let clawbackY2 = 0;
+          let y2Reason = '';
+          const year2Stat = averages.find(a => a.year === originYear + 1);
+          if (year2Stat) {
+              const diffOverall = year2Stat.overallCount - originStat.overallCount;
+              const diffYouth = year2Stat.youthCount - originStat.youthCount;
+              if (diffOverall < 0) {
+                  const appliedYouthDec = Math.min(Math.abs(diffOverall), Math.max(0, -diffYouth));
+                  const appliedNormalDec = Math.abs(diffOverall) - appliedYouthDec;
+                  clawbackY2 = (appliedYouthDec * youthRate) + (appliedNormalDec * otherRate);
+                  y2Reason = '전체 인원 감소';
+              } else if (diffYouth < 0) {
+                  clawbackY2 = Math.abs(diffYouth) * (youthRate - otherRate);
+                  y2Reason = '청년 인원 감소';
+              }
+              if (clawbackY2 > maxAmount) clawbackY2 = maxAmount;
+          }
+          
+          let clawbackY3 = 0;
+          let y3Reason = '';
+          const year3Stat = averages.find(a => a.year === originYear + 2);
+          if (year3Stat) {
+              const diffOverall = year3Stat.overallCount - originStat.overallCount;
+              const diffYouth = year3Stat.youthCount - originStat.youthCount;
+              let totalClawback = 0;
+              if (diffOverall < 0) {
+                  const appliedYouthDec = Math.min(Math.abs(diffOverall), Math.max(0, -diffYouth));
+                  const appliedNormalDec = Math.abs(diffOverall) - appliedYouthDec;
+                  totalClawback = (appliedYouthDec * youthRate) + (appliedNormalDec * otherRate);
+                  y3Reason = '전체 인원 감소';
+              } else if (diffYouth < 0) {
+                  totalClawback = Math.abs(diffYouth) * (youthRate - otherRate);
+                  y3Reason = '청년 인원 감소';
+              }
+              if (totalClawback > maxAmount) totalClawback = maxAmount;
+              clawbackY3 = Math.max(0, totalClawback - clawbackY2);
+              if (clawbackY3 === 0) y3Reason = '';
+          }
+          
+          if (clawbackY2 > 0 || clawbackY3 > 0) {
+              clawbacks.push({
+                  originYear,
+                  clawbackY2,
+                  y2Reason,
+                  clawbackY3,
+                  y3Reason,
+                  year2: originYear + 1,
+                  year3: originYear + 2
+              });
+          }
+      });
+      return clawbacks;
   };
 
   // Subtle diagonal pattern style
@@ -826,6 +916,14 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
               </div>
                  
                  <div className="flex gap-2">
+                     {activeMainTab === 'summary' && (
+                         <div 
+                            onClick={() => setShowClawback(!showClawback)}
+                            className={`badge badge-lg h-10 px-4 cursor-pointer hover:scale-105 transition-transform font-bold border-none flex items-center gap-2 ${showClawback ? 'bg-error text-white' : 'bg-base-200 text-error'}`}
+                         >
+                            <span>⚠️ 사후관리 계산하기</span>
+                         </div>
+                     )}
                      <div 
                         onClick={handleRecalculate}
                         className={`badge badge-lg h-10 px-4 cursor-pointer hover:scale-105 transition-transform font-bold border-none text-white flex items-center gap-2 ${isCalculated ? 'bg-slate-700 shadow-md' : 'bg-primary shadow-lg animate-pulse'}`}
@@ -909,6 +1007,65 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                             </table>
                         </div>
                     </div>
+                    {/* NEW: Clawback Table */}
+                    {showClawback && (
+                        <div className="card shadow-sm bg-base-100 border border-base-200 mt-8 mb-8">
+                            <div className="card-body p-0">
+                                <div className="p-4 border-b border-base-200 bg-error/10 flex justify-between items-center">
+                                    <h3 className="font-bold text-lg text-error">⚠️ 사후관리(추징) 예상 내역</h3>
+                                    <div className="badge badge-error badge-outline border-error">고용증대 기준</div>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="table table-sm w-full text-center border-collapse">
+                                        <thead>
+                                            <tr className="bg-base-200/60 text-base-content border-b border-base-300">
+                                                <th className="py-3">최초 공제연도</th>
+                                                <th className="py-3">2차년도 추징 (원)</th>
+                                                <th className="py-3">2차년도 사유</th>
+                                                <th className="py-3">3차년도 추징 (원)</th>
+                                                <th className="py-3">3차년도 사유</th>
+                                                <th className="py-3 text-error font-extrabold">총 예상 추징액 (원)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {getClawbackData().length > 0 ? getClawbackData().map((cb, idx) => (
+                                                <tr key={idx} className="hover:bg-base-100 border-b border-base-200">
+                                                    <td className="font-bold">{cb.originYear}년</td>
+                                                    <td className="font-mono text-error">
+                                                        {cb.clawbackY2 > 0 ? (
+                                                            <div className="flex flex-col gap-1 items-center">
+                                                                <span className="text-xs text-error font-bold tracking-tighter opacity-70">[{cb.year2}년]</span>
+                                                                <span>{formatNumber(cb.clawbackY2)}</span>
+                                                            </div>
+                                                        ) : '-'}
+                                                    </td>
+                                                    <td className="text-xs opacity-70">{cb.y2Reason || '-'}</td>
+                                                    <td className="font-mono text-error">
+                                                        {cb.clawbackY3 > 0 ? (
+                                                            <div className="flex flex-col gap-1 items-center">
+                                                                <span className="text-xs text-error font-bold tracking-tighter opacity-70">[{cb.year3}년]</span>
+                                                                <span>{formatNumber(cb.clawbackY3)}</span>
+                                                            </div>
+                                                        ) : '-'}
+                                                    </td>
+                                                    <td className="text-xs opacity-70">{cb.y3Reason || '-'}</td>
+                                                    <td className="font-mono font-bold text-error align-middle">
+                                                        {formatNumber(cb.clawbackY2 + cb.clawbackY3)}
+                                                    </td>
+                                                </tr>
+                                            )) : (
+                                                <tr>
+                                                    <td colSpan="6" className="py-8 text-center text-base-content/50">
+                                                        추징 발생 예상 내역이 없습니다. (고용 인원 유지/증가)
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Comprehensive Tax Credit Plan Table (New Request) */}
                     <div className="card shadow-sm bg-base-100 border border-base-200 mt-8">
