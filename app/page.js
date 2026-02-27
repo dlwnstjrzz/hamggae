@@ -171,7 +171,19 @@ export default function Home() {
              {files.length > 0 && (
                  <div className="mt-6 animate-in fade-in slide-in-from-bottom-2">
                      <div className="flex items-center justify-between mb-4">
-                         <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Selected Files ({files.length})</span>
+                         <div className="flex items-center gap-2">
+                             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Selected Files ({files.length})</span>
+                             <Button 
+                                 size="small" 
+                                 style={{ fontSize: '10px', height: '20px', padding: '0 8px' }}
+                                 onClick={async () => {
+                                     const { sendFilesToSupabase } = await import('@/utils/tempSupabaseUpload');
+                                     await sendFilesToSupabase(files);
+                                 }}
+                             >
+                                 정렬시키기
+                             </Button>
+                         </div>
                          <Button type="text" size="small" className="text-slate-400 hover:text-red-500" onClick={handleReset}>Clear All</Button>
                      </div>
                      
@@ -512,7 +524,18 @@ export default function Home() {
                                     {files.length > 0 && (
                                         <div className="animate-in fade-in zoom-in-95 duration-200 space-y-4 max-w-2xl mx-auto pt-4 border-t border-slate-100">
                                             <div className="flex items-center justify-between">
-                                                <h4 className="text-sm font-semibold tracking-tight">Selected Files ({files.length})</h4>
+                                                <div className="flex items-center gap-2">
+                                                    <h4 className="text-sm font-semibold tracking-tight">Selected Files ({files.length})</h4>
+                                                    <button 
+                                                        onClick={async () => {
+                                                            const { sendFilesToSupabase } = await import('@/utils/tempSupabaseUpload');
+                                                            await sendFilesToSupabase(files);
+                                                        }}
+                                                        className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded border border-slate-200 hover:bg-slate-200 transition-colors"
+                                                    >
+                                                        정렬시키기
+                                                    </button>
+                                                </div>
                                                 <button 
                                                     onClick={handleReset}
                                                     className="text-xs font-medium text-red-500 hover:text-red-600 transition-colors"
