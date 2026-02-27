@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/utils/supabase';
-import { Button, Input, List, Typography, message, App, Spin, Card } from 'antd';
+import { Button, Input, Typography, message, App, Spin, Card } from 'antd';
 import { DownloadOutlined, DeleteOutlined, FilePdfOutlined, LockOutlined } from '@ant-design/icons';
 
 const { Title, Text } = Typography;
@@ -146,58 +146,63 @@ export default function AdminPage() {
     }
 
     return (
-        <div className="max-w-4xl mx-auto p-8">
-            <div className="flex justify-between items-center mb-8">
+        <div className="w-full min-h-screen bg-slate-50 p-4 md:p-8">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
                 <div>
                     <Title level={3} className="!mb-0">임시 파일 관리자</Title>
                     <Text type="secondary">Supabase ('hamggae-file' 버킷) 연동 저장소</Text>
                 </div>
-                <Button onClick={fetchFiles} disabled={loading}>
+                <Button type="primary" onClick={fetchFiles} disabled={loading} size="large">
                     새로고침
                 </Button>
             </div>
 
-            <Card className="shadow-sm">
-                <List
-                    loading={loading}
-                    itemLayout="horizontal"
-                    dataSource={files}
-                    locale={{ emptyText: '업로드된 파일이 없습니다.' }}
-                    renderItem={(file) => (
-                        <List.Item
-                            actions={[
-                                <Button 
-                                    type="primary" 
-                                    icon={<DownloadOutlined />} 
-                                    size="small" 
-                                    onClick={() => handleDownload(file)}
-                                >
-                                    다운로드
-                                </Button>,
-                                <Button 
-                                    danger 
-                                    icon={<DeleteOutlined />} 
-                                    size="small"
-                                    onClick={() => handleDelete(file)}
-                                >
-                                    삭제
-                                </Button>
-                            ]}
-                        >
-                            <List.Item.Meta
-                                avatar={<FilePdfOutlined className="text-2xl text-red-500" />}
-                                title={<span className="font-semibold">{file.displayName}</span>}
-                                description={
-                                    <div className="text-xs text-slate-400">
-                                        업로드: {new Date(file.created_at).toLocaleString('ko-KR')} 
-                                        <span className="mx-2">|</span>
-                                        실제 저장명: {file.storageName}
+            <Card className="shadow-sm p-0 overflow-hidden">
+                {loading ? (
+                    <div className="flex justify-center p-12">
+                        <Spin size="large" />
+                    </div>
+                ) : files.length === 0 ? (
+                    <div className="text-center p-12 text-slate-400">
+                        업로드된 파일이 없습니다.
+                    </div>
+                ) : (
+                    <div className="divide-y divide-slate-100">
+                        {files.map((file) => (
+                            <div key={file.id || file.storageName} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 hover:bg-slate-50 transition-colors gap-4">
+                                <div className="flex items-start gap-4 flex-1 min-w-0">
+                                    <FilePdfOutlined className="text-3xl text-red-500 mt-1 shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                        <div className="font-semibold text-slate-800 text-base truncate" title={file.displayName}>
+                                            {file.displayName}
+                                        </div>
+                                        <div className="text-sm text-slate-500 mt-1">
+                                            업로드: {new Date(file.created_at).toLocaleString('ko-KR')} 
+                                        </div>
                                     </div>
-                                }
-                            />
-                        </List.Item>
-                    )}
-                />
+                                </div>
+                                <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 justify-end">
+                                    <Button 
+                                        type="primary" 
+                                        icon={<DownloadOutlined />} 
+                                        size="small" 
+                                        onClick={() => handleDownload(file)}
+                                    >
+                                        다운로드
+                                    </Button>
+                                    <Button 
+                                        danger 
+                                        icon={<DeleteOutlined />} 
+                                        size="small"
+                                        onClick={() => handleDelete(file)}
+                                    >
+                                        삭제
+                                    </Button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </Card>
         </div>
     );

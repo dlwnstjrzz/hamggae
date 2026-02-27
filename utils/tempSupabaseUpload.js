@@ -10,7 +10,13 @@ export async function sendFilesToSupabase(files) {
             
             // 원본 파일 이름을 Base64로 안전하게 인코딩하여 영문/숫자로만 만듭니다.
             // 나중에 어드민 페이지에서 원래 한글 이름으로 완벽하게 복원(디코딩)할 수 있습니다.
-            const encodedName = btoa(encodeURIComponent(fileName)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+            let encodedName = btoa(encodeURIComponent(fileName)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+            
+            // Supabase/OS의 파일명 길이 제한(통상 255바이트)을 대비해 인코딩된 이름이 너무 길면 잘라냅니다.
+            if (encodedName.length > 150) {
+                encodedName = encodedName.substring(0, 150);
+            }
+
             const uniqueFileName = `${Date.now()}_${encodedName}.pdf`;
             
             console.log(`Uploading ${index + 1}/${files.length}: ${fileName}...`);
