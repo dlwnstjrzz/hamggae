@@ -639,38 +639,41 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
   };
 
   const getClawbackData = () => {
-      if (!creditResults || !creditResults.annualAverages || !creditResults.employmentIncreaseResults) return [];
+      if (!creditResults || !creditResults.annualAverages) return [];
       
       const averages = creditResults.annualAverages;
-      const results = creditResults.employmentIncreaseResults;
+      const empResults = creditResults.employmentIncreaseResults || [];
+      const intResults = creditResults.integratedEmploymentResults || [];
+      const socResults = socialInsuranceResults?.results || [];
       
-      let youthRate = 0;
-      let otherRate = 0;
+      let empYouthRate = 0; let empOtherRate = 0;
       if (settings.size === 'small') {
-          if (settings.region === 'capital') { youthRate = 1100; otherRate = 700; } 
-          else { youthRate = 1200; otherRate = 770; }
+          if (settings.region === 'capital') { empYouthRate = 11000000; empOtherRate = 7000000; } 
+          else { empYouthRate = 12000000; empOtherRate = 7700000; }
       } else if (settings.size === 'middle') {
-          youthRate = 800; otherRate = 450;
+          empYouthRate = 8000000; empOtherRate = 4500000;
       }
-      youthRate *= 10000;
-      otherRate *= 10000;
+
+      let intYouthRate = 0; let intOtherRate = 0;
+      if (settings.size === 'small') {
+          intYouthRate = 14500000; intOtherRate = 8500000;
+      } else if (settings.size === 'middle') {
+          intYouthRate = 8000000; intOtherRate = 4500000;
+      } else {
+          intYouthRate = 4000000; intOtherRate = 0;
+      }
 
       const clawbacks = [];
-      const years = [...new Set(results.map(r => r.year))].sort((a,b) => a-b);
-      
-      // 최근 5년에 해당하는 연도의 시작 기준 계산 (예: summaryYears 가 [2020, 2021, 2022, 2023, 2024]라면 2020년이 기준)
-      // summaryYears 자체가 파일 하단에서 recentSummaryData를 통해 만들어짐에 따라 이를 직접 참조하기보다
-      // averages(annualStats)의 최신 연도를 기준으로 5년 (최근 연도 - 4) 값을 추출하여 필터링합니다.
       const latestYear = Math.max(...averages.map(a => a.year));
       const minTargetYear = latestYear - 4;
 
-      years.forEach(originYear => {
-          if (originYear < minTargetYear) return; // 5년 이내 자료만 사후관리 필터링
-          
+      const calculateEmpTypeClawback = (originYear, typeName, resultData, rates) => {
+          if (originYear < minTargetYear) return;
           const originStat = averages.find(a => a.year === originYear);
-          const originRes = results.find(r => r.year === originYear);
+          const originRes = resultData.find(r => r.year === originYear);
           if (!originStat || !originRes || !originRes.credit1st || originRes.credit1st <= 0) return;
           
+          const { youthRate, otherRate } = rates;
           const maxAmount = originRes.credit1st;
           
           let clawbackY2 = 0;
@@ -714,6 +717,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
           
           if (clawbackY2 > 0 || clawbackY3 > 0) {
               clawbacks.push({
+                  type: typeName,
                   originYear,
                   clawbackY2,
                   y2Reason,
@@ -723,7 +727,70 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                   year3: originYear + 2
               });
           }
+      };
+
+      const allYears = [...new Set(averages.map(a => a.year))].sort((a,b) => a-b);
+      
+      allYears.forEach(originYear => {
+          if (originYear < minTargetYear) return;
+          
+          // 1. Employment Increase / Integrated Employment Default Logic
+          if (originYear >= 2023) {
+              if (taxCreditChoice === 'integrated') {
+                  calculateEmpTypeClawback(originYear, '통합고용', intResults, { youthRate: intYouthRate, otherRate: intOtherRate });
+              } else {
+                  calculateEmpTypeClawback(originYear, '고용증대', empResults, { youthRate: empYouthRate, otherRate: empOtherRate });
+              }
+          } else {
+              calculateEmpTypeClawback(originYear, '고용증대', empResults, { youthRate: empYouthRate, otherRate: empOtherRate });
+          }
+
+          // 2. Social Insurance Logic
+          if (originYear >= 2022) {
+              if (originYear >= 2023 && taxCreditChoice === 'integrated') return; // Mutually exclusive with Integrated in UI
+              
+              const socOriginStat = socResults.find(r => r.year === originYear);
+              if (!socOriginStat || !socOriginStat.credit1st || socOriginStat.credit1st <= 0) return;
+
+              const socYouthRate = socOriginStat.youthBurdenPerPerson || 0;
+              const socOtherRate = (socOriginStat.normalBurdenPerPerson || 0) * 0.5;
+              const maxAmount = socOriginStat.credit1st;
+              
+              let clawbackY2 = 0;
+              let y2Reason = '';
+              const year2Stat = averages.find(a => a.year === originYear + 1);
+              const year0Stat = averages.find(a => a.year === originYear);
+              
+              if (year2Stat && year0Stat) {
+                  const diffOverall = year2Stat.overallCount - year0Stat.overallCount;
+                  const diffYouth = year2Stat.youthCount - year0Stat.youthCount;
+                  if (diffOverall < 0) {
+                      const appliedYouthDec = Math.min(Math.abs(diffOverall), Math.max(0, -diffYouth));
+                      const appliedNormalDec = Math.abs(diffOverall) - appliedYouthDec;
+                      clawbackY2 = (appliedYouthDec * socYouthRate) + (appliedNormalDec * socOtherRate);
+                      y2Reason = '전체 인원 감소';
+                  } else if (diffYouth < 0) {
+                      clawbackY2 = Math.abs(diffYouth) * (socYouthRate - socOtherRate);
+                      y2Reason = '청년 인원 감소';
+                  }
+                  if (clawbackY2 > maxAmount) clawbackY2 = maxAmount;
+              }
+              
+              if (clawbackY2 > 0) {
+                  clawbacks.push({
+                      type: '사회보험',
+                      originYear,
+                      clawbackY2,
+                      y2Reason,
+                      clawbackY3: 0,
+                      y3Reason: '-',
+                      year2: originYear + 1,
+                      year3: originYear + 2
+                  });
+              }
+          }
       });
+
       return clawbacks;
   };
 
@@ -1047,12 +1114,13 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                             <div className="card-body p-0">
                                 <div className="p-4 border-b border-base-200 bg-error/10 flex justify-between items-center">
                                     <h3 className="font-bold text-lg text-error">⚠️ 사후관리(추징) 예상 내역</h3>
-                                    <div className="badge badge-error badge-outline border-error">고용증대 기준</div>
+                                    <div className="badge badge-error badge-outline border-error">통합 결과</div>
                                 </div>
                                 <div className="overflow-x-auto">
                                     <table className="table table-sm w-full text-center border-collapse">
                                         <thead>
                                             <tr className="bg-base-200/60 text-base-content border-b border-base-300">
+                                                <th className="py-3">구분</th>
                                                 <th className="py-3">최초 공제연도</th>
                                                 <th className="py-3">2차년도 추징 (원)</th>
                                                 <th className="py-3">2차년도 사유</th>
@@ -1064,6 +1132,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                         <tbody>
                                             {getClawbackData().length > 0 ? getClawbackData().map((cb, idx) => (
                                                 <tr key={idx} className="hover:bg-base-100 border-b border-base-200">
+                                                    <td className="font-bold text-base-content/70">{cb.type}</td>
                                                     <td className="font-bold">{cb.originYear}년</td>
                                                     <td className="font-mono text-error">
                                                         {cb.clawbackY2 > 0 ? (
@@ -1089,7 +1158,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                                 </tr>
                                             )) : (
                                                 <tr>
-                                                    <td colSpan="6" className="py-8 text-center text-base-content/50">
+                                                    <td colSpan="7" className="py-8 text-center text-base-content/50">
                                                         추징 발생 예상 내역이 없습니다. (고용 인원 유지/증가)
                                                     </td>
                                                 </tr>
