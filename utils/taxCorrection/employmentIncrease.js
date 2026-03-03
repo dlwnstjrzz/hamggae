@@ -121,12 +121,12 @@ function calculateIntegratedCredit(annualStats, settings) {
     // However, to calculate increase in 2023, we need 2022 data. 
     // So we pass full history, but we only output results for Year >= 2023.
     
-    const results = calculateCumulativeCredits(annualStats, youthRate, otherRate);
+    const results = calculateCumulativeCredits(annualStats, youthRate, otherRate, 2023);
     return results.filter(r => r.year >= 2023);
 }
 
 // Shared Helper for Cumulative Calculation (1st, 2nd, 3rd year)
-function calculateCumulativeCredits(annualStats, youthRate, otherRate) {
+function calculateCumulativeCredits(annualStats, youthRate, otherRate, startYear = null) {
     const initialCredits = {}; // { 2022: { amount: 1000, baseCount: 10.5, youthInc: 1, otherInc: 0 } }
     const calculations = [];
     
@@ -154,28 +154,30 @@ function calculateCumulativeCredits(annualStats, youthRate, otherRate) {
         }
 
         // Store credit generated in Year T
-        initialCredits[current.year] = {
-            year: current.year,
-            creditAmount: Math.floor(creditAmount * 10000), 
-            baseOverallCount: prev.overallCount, // Baseline for maintenance check usually compares T (current) vs T-1 (inception year prev). 
-            // Simplified Rule: To get 2nd/3rd year payment, Current Overall Count must be >= Overall Count of the year CREDIT WAS GENERATED? 
-            // No, standard rule is maintaining the *increase*.
-            // Let's stick to the previous implemented logic: Maintain >= Inception Year's Overall Count? 
-            // Previous code used: `requiredMaintenanceCount: current.overallCount` (Current at inception)
-            // Wait, if I increased from 10 to 12. I get credit for 2. 
-            // Next year, if I have 11. I decreased by 1. Do I lose everything?
-            // For simplifiction in this prototype, we used a strict maintenance check.
-            requiredMaintenanceCount: prev.overallCount, // Actually, to maintain the *increase*, we usually compare against Base Year. 
-            // But let's follow the previous code's implied logic which was checking against `current.overallCount`?
-            // Re-reading previous code: `requiredMaintenanceCount: current.overallCount`.
-            // If I had 10 -> 12. current is 12. required is 12.
-            // Next year if I have 11. 11 < 12. I get 0.
-            // This is a "All or Nothing" approach for the prototype. User hasn't complained.
-            requiredMaintenanceCount: current.overallCount,
-            
-            youthIncreaseRecognized,
-            otherIncreaseRecognized
-        };
+        if (startYear === null || current.year >= startYear) {
+            initialCredits[current.year] = {
+                year: current.year,
+                creditAmount: Math.floor(creditAmount * 10000), 
+                baseOverallCount: prev.overallCount, // Baseline for maintenance check usually compares T (current) vs T-1 (inception year prev). 
+                // Simplified Rule: To get 2nd/3rd year payment, Current Overall Count must be >= Overall Count of the year CREDIT WAS GENERATED? 
+                // No, standard rule is maintaining the *increase*.
+                // Let's stick to the previous implemented logic: Maintain >= Inception Year's Overall Count? 
+                // Previous code used: `requiredMaintenanceCount: current.overallCount` (Current at inception)
+                // Wait, if I increased from 10 to 12. I get credit for 2. 
+                // Next year, if I have 11. I decreased by 1. Do I lose everything?
+                // For simplifiction in this prototype, we used a strict maintenance check.
+                requiredMaintenanceCount: prev.overallCount, // Actually, to maintain the *increase*, we usually compare against Base Year. 
+                // But let's follow the previous code's implied logic which was checking against `current.overallCount`?
+                // Re-reading previous code: `requiredMaintenanceCount: current.overallCount`.
+                // If I had 10 -> 12. current is 12. required is 12.
+                // Next year if I have 11. 11 < 12. I get 0.
+                // This is a "All or Nothing" approach for the prototype. User hasn't complained.
+                requiredMaintenanceCount: current.overallCount,
+                
+                youthIncreaseRecognized,
+                otherIncreaseRecognized
+            };
+        }
     }
 
     // Step 2: Calculate Receivable Credit for each year T (Summing valid 1st, 2nd, 3rd claims)
