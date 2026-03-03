@@ -36,14 +36,11 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
             }
         });
 
-        const fteYouth = Math.floor((totalYouthMonths / 12) * 100) / 100;
-        const fteNormal = Math.floor((totalNormalMonths / 12) * 100) / 100;
-
         return {
             totalWages,
             totalAnnualizedWages,
             totalWorkingMonths: totalMonths,
-            fte: Number((fteYouth + fteNormal).toFixed(2)), // Truncate youth/normal separately, then sum
+            fte: Math.floor((totalMonths * 100) / 12) / 100, // Combine total months before truncating
             count
         };
     };
@@ -94,9 +91,17 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
         // 3. Check High Salary (Sum of all records in a year > 70m)
         for (let y = targetYear; y >= targetYear - 4; y--) {
             const matchingRecords = (dataByYear[y] || []).filter(d => isSamePerson(d, emp));
+            if (matchingRecords.length === 0) continue;
+            
             const yearTotalSalary = matchingRecords.reduce((sum, d) => sum + d.totalSalary, 0);
+            const totalMonths = matchingRecords.reduce((sum, d) => sum + (d.youthMonths || 0) + (d.normalMonths || 0), 0);
 
-            if (yearTotalSalary > 70000000) {
+            let checkSalary = yearTotalSalary;
+            if (totalMonths > 0 && totalMonths < 12) {
+                checkSalary = yearTotalSalary * (12 / totalMonths);
+            }
+
+            if (checkSalary > 70000000) {
                 return { isExcluded: true, reason: '5년 내 연봉 7천 이상' };
             }
         }
@@ -170,7 +175,10 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
 
                 if (!exclusionRecord) {
                     // Not in Target Year (e.g. resigned before). derive reason
-                    if (e.totalSalary > 70000000) reason = '5년 내 연봉 7천 이상';
+                    const workingMonths = (e.youthMonths || 0) + (e.normalMonths || 0);
+                    const annualizedSalary = (workingMonths > 0 && workingMonths < 12) ? e.totalSalary * (12 / workingMonths) : e.totalSalary;
+                    
+                    if (annualizedSalary > 70000000) reason = '5년 내 연봉 7천 이상';
                     else if (displayRetireDate) reason = '5년 내 퇴사이력'; 
                 }
                 
