@@ -507,6 +507,9 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
   // Processing Status
   const [isCalculated, setIsCalculated] = useState(false);
   const [showClawback, setShowClawback] = useState(false);
+  
+  // Tax Credit Choice for 2023+ (integrated vs separated)
+  const [taxCreditChoice, setTaxCreditChoice] = useState('integrated'); // 'integrated' | 'separated'
 
   // 1. Initial Data Processing
   useEffect(() => {
@@ -593,6 +596,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
   useEffect(() => {
      if(processedData.length > 0) {
          setIsCalculated(false); 
+         setShowClawback(false);
      }
   }, [settings]);
 
@@ -627,6 +631,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
     });
     setProcessedData(newData);
     setIsCalculated(false);
+    setShowClawback(false);
   };
 
   const formatNumber = (value) => {
@@ -844,10 +849,23 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
            const rowData = { ...row, total: 0 };
            recentSummaryData.forEach(d => {
                let val = 0;
-               if (row.key === 'emp') val = d.employmentIncrease;
-               if (row.key === 'int') val = d.integratedEmployment;
-               if (row.key === 'soc') val = d.socialInsurance;
-               if (row.key === 'inc') val = d.incomeIncrease;
+               if (d.year >= 2023) {
+                   if (taxCreditChoice === 'integrated') {
+                       if (row.key === 'int') val = d.integratedEmployment || 0;
+                       if (row.key === 'emp') val = 0;
+                       if (row.key === 'soc') val = 0;
+                   } else {
+                       if (row.key === 'int') val = 0;
+                       if (row.key === 'emp') val = d.employmentIncrease || 0;
+                       if (row.key === 'soc') val = d.socialInsurance || 0;
+                   }
+                   if (row.key === 'inc') val = d.incomeIncrease || 0;
+               } else {
+                   if (row.key === 'emp') val = d.employmentIncrease || 0;
+                   if (row.key === 'int') val = d.integratedEmployment || 0; // Usually 0 before 2023
+                   if (row.key === 'soc') val = d.socialInsurance || 0;
+                   if (row.key === 'inc') val = d.incomeIncrease || 0;
+               }
                rowData[d.year] = val;
                rowData.total += val;
            });
@@ -918,10 +936,10 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                  <div className="flex gap-2">
                      {activeMainTab === 'summary' && (
                          <div 
-                            onClick={() => setShowClawback(!showClawback)}
-                            className={`badge badge-lg h-10 px-4 cursor-pointer hover:scale-105 transition-transform font-bold border-none flex items-center gap-2 ${showClawback ? 'bg-error text-white' : 'bg-base-200 text-error'}`}
+                            onClick={() => setShowClawback(true)}
+                            className={`badge badge-lg h-10 px-4 cursor-pointer hover:scale-105 transition-transform font-bold border-none text-white flex items-center gap-2 ${showClawback ? 'bg-slate-700 shadow-md' : 'bg-error shadow-lg animate-pulse'}`}
                          >
-                            <span>⚠️ 사후관리 계산하기</span>
+                            <span>⚠️ {showClawback ? '사후관리 재계산' : '사후관리 계산하기'}</span>
                          </div>
                      )}
                      <div 
@@ -971,7 +989,23 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                         <div className="card-body p-0">
                             <div className="p-4 border-b border-base-200 bg-base-100 flex justify-between items-center">
                                 <h3 className="font-bold text-lg">📊 최종 집계표</h3>
-                                <div className="badge badge-outline">최근 5년</div>
+                                <div className="flex items-center gap-4">
+                                     <div className="flex items-center bg-base-200 rounded-lg p-1">
+                                         <button 
+                                             onClick={() => setTaxCreditChoice('integrated')}
+                                             className={`px-3 py-1 mr-1 text-xs font-bold rounded-md transition-all ${taxCreditChoice === 'integrated' ? 'bg-primary text-white shadow-sm' : 'text-base-content/50 hover:bg-base-300'}`}
+                                         >
+                                             23년 이후 통합고용으로 적용
+                                         </button>
+                                         <button 
+                                             onClick={() => setTaxCreditChoice('separated')}
+                                             className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${taxCreditChoice === 'separated' ? 'bg-secondary text-white shadow-sm' : 'text-base-content/50 hover:bg-base-300'}`}
+                                         >
+                                             23년 이후 고용증대+사회보험으로 적용
+                                         </button>
+                                     </div>
+                                    <div className="badge badge-outline">최근 5년</div>
+                                </div>
                             </div>
                             <div className="text-right text-sm text-base-content/60 px-4 py-2">단위: 원</div>
                             <table className="table table-zebra w-full text-center">
