@@ -507,6 +507,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
   // Processing Status
   const [isCalculated, setIsCalculated] = useState(false);
   const [showClawback, setShowClawback] = useState(false);
+  const [manuallyExcludedIds, setManuallyExcludedIds] = useState(new Set());
   
   // Tax Credit Choice for 2023+ (integrated vs separated)
   const [taxCreditChoice, setTaxCreditChoice] = useState('integrated'); // 'integrated' | 'separated'
@@ -623,12 +624,30 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
   };
 
   const updateExclusion = (empIndex, reason) => {
+    let exists = false;
     const newData = processedData.map(d => {
         if (d.name === empIndex.name && d.id === empIndex.id && d.year === empIndex.year) {
+            exists = true;
             return { ...d, exclusionReason: reason };
         }
         return d;
     });
+    
+    // If we're updating exclusion for a year where the person had no data originally
+    if (!exists) {
+        newData.push({
+            name: empIndex.name,
+            id: empIndex.id,
+            year: empIndex.year,
+            totalSalary: 0,
+            exclusionReason: reason,
+            months: 0,
+            normalMonths: 0,
+            youthMonths: 0,
+            // Add other defaults as necessary to avoid breaking calculations
+        });
+    }
+
     setProcessedData(newData);
     setIsCalculated(false);
     setShowClawback(false);
@@ -833,10 +852,10 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
 
   // 2. Filtered Exclusions List
   const ExclusionList = () => {
-      if (!processedData.some(d => d.exclusionReason)) return null;
+      if (processedData.length === 0) return null;
       const allYears = [...new Set(processedData.map(d => d.year))].sort((a,b) => a-b);
       
-      const excludedIds = new Set();
+      const excludedIds = new Set(manuallyExcludedIds);
       const grouped = {};
       
       processedData.forEach(d => {
@@ -854,12 +873,39 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
           }
       });
 
+      const uniqueNonExcludedEmployees = Array.from(
+          new Set(processedData.filter(d => !excludedIds.has(d.id)).map(d => JSON.stringify({id: d.id, name: d.name})))
+      ).map(str => JSON.parse(str)).sort((a,b) => a.name.localeCompare(b.name));
+
       return (
           <div className="card bg-base-100 shadow-sm border border-base-200 mt-8">
               <div className="card-body p-6">
-                  <h3 className="card-title text-base-content mb-4 flex items-center gap-2">
-                      <span className="text-xl">🚫</span> 제외 대상자 명단
-                  </h3>
+                  <div className="flex justify-between items-center mb-4">
+                      <h3 className="card-title text-base-content flex items-center gap-2 m-0">
+                          <span className="text-xl">🚫</span> 제외 대상자 명단
+                      </h3>
+                      <select 
+                          className="select select-sm select-bordered w-full max-w-[200px]"
+                          onChange={(e) => {
+                              if(e.target.value) {
+                                  const selectedId = e.target.value;
+                                  setManuallyExcludedIds(prev => new Set(prev).add(selectedId));
+                                  // We must also create empty records for this ID for all years so it shows up in table loop
+                                  const empData = processedData.find(d => d.id === selectedId);
+                                  if (empData) {
+                                      // Force re-render by doing a no-op update on processedData or just relying on manuallyExcludedIds
+                                  }
+                                  e.target.value = "";
+                              }
+                          }}
+                          value=""
+                      >
+                          <option value="" disabled>+ 사원 선택하여 추가</option>
+                          {uniqueNonExcludedEmployees.map(emp => (
+                              <option key={emp.id} value={emp.id}>{emp.name} ({emp.id})</option>
+                          ))}
+                      </select>
+                  </div>
                   <div className="overflow-x-auto">
                       <table className="table text-center">
                           <thead>
@@ -870,25 +916,48 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                               </tr>
                           </thead>
                           <tbody>
-                              {Object.values(grouped).map((person, idx) => (
-                                  <tr key={idx} className="hover">
+                              {Object.keys(grouped).length === 0 ? (
+                                  <tr>
+                                      <td colSpan={allYears.length + 2} className="py-8 text-center text-base-content/50 font-medium">
+                                          제외 대상자가 없습니다. 우측 상단에서 사원 번호를 선택하여 추가해주세요.
+                                      </td>
+                                  </tr>
+                              ) : (
+                                  Object.values(grouped).map((person, idx) => (
+                                      <tr key={idx} className="hover">
                                       <td className="font-bold">{person.name}</td>
                                       <td className="text-sm text-left opacity-60">
                                           <div className="font-mono">{person.id}</div>
                                       </td>
                                       {allYears.map(y => {
                                           const yearData = person.years[y];
-                                          if (!yearData) return <td key={y} className="opacity-20">-</td>;
-                                          const isExcluded = !!yearData.exclusionReason;
+                                          // If user manually added this person, but they don't have data for this specific year
+                                          // we construct a dummy object to allow them to be excluded for this year manually
+                                          const isExcluded = yearData ? !!yearData.exclusionReason : false;
+                                          const currentDataOrDummy = yearData || { id: person.id, name: person.name, year: y, totalSalary: 0, exclusionReason: null };
+
                                           return (
-                                              <td key={y} className={`text-sm ${isExcluded ? 'text-error' : ''}`}>
-                                                  {isExcluded && <div className="badge badge-sm badge-error badge-outline mb-1">{yearData.exclusionReason}</div>}
-                                                  <div className="font-mono">{formatNumber(yearData.totalSalary)}</div>
+                                              <td key={y} className={`text-sm ${isExcluded ? 'font-bold' : ''}`}>
+                                                  <div className="flex flex-col items-center gap-1">
+                                                      <select
+                                                          className={`select select-xs select-bordered ${isExcluded ? 'bg-base-200 text-base-content font-bold border-base-300' : 'bg-base-100 opacity-50 text-base-content/50 border-base-200'}`}
+                                                          value={currentDataOrDummy.exclusionReason || ''}
+                                                          onChange={(e) => updateExclusion(currentDataOrDummy, e.target.value || null)}
+                                                      >
+                                                          <option value="" className="text-base-content/80 opacity-80">- 제외 안함 -</option>
+                                                          <option value="임원" className="text-base-content font-bold">임원</option>
+                                                          <option value="최대주주및가족" className="text-base-content font-bold">최대주주/친족</option>
+                                                          <option value="기타" className="text-base-content font-bold">계약직/기타</option>
+                                                      </select>
+                                                      <div className={`font-mono ${isExcluded ? 'line-through text-base-content/40' : ''}`}>
+                                                          {yearData ? formatNumber(yearData.totalSalary) : '-'}
+                                                      </div>
+                                                  </div>
                                               </td>
                                           );
                                       })}
                                   </tr>
-                              ))}
+                              )))}
                           </tbody>
                       </table>
                   </div>
