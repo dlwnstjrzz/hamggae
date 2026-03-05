@@ -167,12 +167,10 @@ function extractEmployeeData(words, year) {
   } else {
   }
 
-  // 주민등록번호 (무조건 뒷자리 마스킹 처리)
+  // 주민등록번호 (추출만 하고 일괄 처리)
   const juminMatch = fullText.match(/⑥\s*주민등록번호\s+(\d{6}-(?:\d{7}|\d\*{6}|\*{7}))/) || fullText.match(/주민등록번호\s+(\d{6}-(?:\d{7}|\d\*{6}|\*{7}))/);
   if (juminMatch) {
-    const rawJumin = juminMatch[1].trim();
-    const frontPart = rawJumin.split('-')[0];
-    data.주민등록번호 = `${frontPart}-*******`;
+    data.주민등록번호 = juminMatch[1].trim();
   }
 
   // 입사일
@@ -257,6 +255,17 @@ export async function processWithholdingPDF(pdf, filename, preLoadedWords) {
     } else {
       // console.log(`[Page ${i + 1}] 사원 첫 페이지 아님`);
     }
+  }
+
+  // 단 한 명이라도 주민등록번호에 '*'가 포함되어 있다면, 모든 인원의 뒷자리를 별표로 마스킹 처리
+  const hasMaskedJumin = employees.some(emp => emp.주민등록번호 && emp.주민등록번호.includes('*'));
+  if (hasMaskedJumin) {
+    employees.forEach(emp => {
+      if (emp.주민등록번호 && emp.주민등록번호.includes('-')) {
+        const frontPart = emp.주민등록번호.split('-')[0];
+        emp.주민등록번호 = `${frontPart}-*******`;
+      }
+    });
   }
 
   console.log(`=== 파일 처리 완료: ${employees.length}명 추출 ===\n`);

@@ -543,7 +543,26 @@ export default function Home() {
                                 <div className="space-y-6">
                                     {/* PDF Upload Area */}
                                     <div className="flex items-center justify-center w-full">
-                                        <label htmlFor="pdf-upload" className="flex flex-col items-center justify-center w-full h-64 border-2 border-slate-300 border-dashed rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                                        <label 
+                                            htmlFor="pdf-upload" 
+                                            onDragOver={(e) => e.preventDefault()}
+                                            onDrop={(e) => {
+                                                e.preventDefault();
+                                                if (e.dataTransfer.files) {
+                                                    const validFiles = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+                                                    if (validFiles.length > 0) {
+                                                        const newFiles = validFiles.map(file => {
+                                                            file.uid = Math.random().toString(36).substring(7);
+                                                            return file;
+                                                        });
+                                                        setFiles(prev => [...prev, ...newFiles]);
+                                                    } else {
+                                                        message.error('PDF 파일만 업로드 가능합니다.');
+                                                    }
+                                                }
+                                            }}
+                                            className="flex flex-col items-center justify-center w-full h-64 border-2 border-slate-300 border-dashed rounded-lg cursor-pointer hover:bg-slate-50 transition-colors"
+                                        >
                                             <div className="flex flex-col items-center justify-center pt-5 pb-6">
                                                 <InboxOutlined className="text-4xl text-slate-400 mb-4" />
                                                 <p className="text-sm text-slate-500"><span className="font-semibold">Click to upload</span> or drag and drop</p>
@@ -661,7 +680,18 @@ export default function Home() {
                                      {!processedData ? (
 
                                         <div className="flex items-center justify-center w-full">
-                                            <label htmlFor="excel-upload" className="flex flex-col items-center justify-center w-full h-64 border-2 border-slate-300 border-dashed rounded-lg cursor-pointer hover:bg-slate-50 transition-colors">
+                                            <label 
+                                                htmlFor="excel-upload" 
+                                                onDragOver={(e) => e.preventDefault()}
+                                                onDrop={(e) => {
+                                                    e.preventDefault();
+                                                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                                                        const file = e.dataTransfer.files[0];
+                                                        customRequestExcel({ file, onSuccess: () => {} });
+                                                    }
+                                                }}
+                                                className="flex flex-col items-center justify-center w-full h-64 border-2 border-slate-300 border-dashed rounded-lg cursor-pointer hover:bg-slate-50 transition-colors"
+                                            >
                                                 <div className="flex flex-col items-center justify-center pt-5 pb-6">
                                                     <FileExcelOutlined className="text-4xl text-emerald-500 mb-4" />
                                                     <p className="text-sm text-slate-500"><span className="font-semibold">Click to upload</span> or drag and drop</p>
