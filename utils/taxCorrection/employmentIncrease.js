@@ -173,6 +173,7 @@ function calculateCumulativeCredits(annualStats, youthRate, otherRate, startYear
                 // Next year if I have 11. 11 < 12. I get 0.
                 // This is a "All or Nothing" approach for the prototype. User hasn't complained.
                 requiredMaintenanceCount: current.overallCount,
+                requiredMaintenanceYouthCount: current.youthCount,
                 
                 youthIncreaseRecognized,
                 otherIncreaseRecognized
@@ -194,7 +195,14 @@ function calculateCumulativeCredits(annualStats, youthRate, otherRate, startYear
         const credit2ndObj = initialCredits[prev1Year];
         let credit2nd = 0;
         if (credit2ndObj && currentOverallCount >= credit2ndObj.requiredMaintenanceCount) {
-            credit2nd = credit2ndObj.creditAmount;
+            let youthDec = Math.max(0, credit2ndObj.requiredMaintenanceYouthCount - stat.youthCount);
+            if (youthDec > 0) {
+                let effectiveYouth = Math.max(0, credit2ndObj.youthIncreaseRecognized - youthDec);
+                let effectiveOther = (credit2ndObj.youthIncreaseRecognized + credit2ndObj.otherIncreaseRecognized) - effectiveYouth;
+                credit2nd = Math.floor((effectiveYouth * youthRate + effectiveOther * otherRate) * 10000);
+            } else {
+                credit2nd = credit2ndObj.creditAmount;
+            }
         }
 
         // 3. Carry Forward from T-2 (3rd Year Payment)
@@ -202,7 +210,14 @@ function calculateCumulativeCredits(annualStats, youthRate, otherRate, startYear
         const credit3rdObj = initialCredits[prev2Year];
         let credit3rd = 0;
         if (credit3rdObj && currentOverallCount >= credit3rdObj.requiredMaintenanceCount) {
-            credit3rd = credit3rdObj.creditAmount;
+            let youthDec = Math.max(0, credit3rdObj.requiredMaintenanceYouthCount - stat.youthCount);
+            if (youthDec > 0) {
+                let effectiveYouth = Math.max(0, credit3rdObj.youthIncreaseRecognized - youthDec);
+                let effectiveOther = (credit3rdObj.youthIncreaseRecognized + credit3rdObj.otherIncreaseRecognized) - effectiveYouth;
+                credit3rd = Math.floor((effectiveYouth * youthRate + effectiveOther * otherRate) * 10000);
+            } else {
+                credit3rd = credit3rdObj.creditAmount;
+            }
         }
 
         if ((credit1stObj && credit1st > 0) || credit2nd > 0 || credit3rd > 0) {
