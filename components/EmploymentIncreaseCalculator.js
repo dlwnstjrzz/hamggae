@@ -1198,43 +1198,62 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                             <tr className="bg-base-200/60 text-base-content border-b border-base-300">
                                                 <th className="py-3">구분</th>
                                                 <th className="py-3">최초 공제연도</th>
-                                                <th className="py-3">2차년도 추징 (원)</th>
-                                                <th className="py-3">2차년도 사유</th>
-                                                <th className="py-3">3차년도 추징 (원)</th>
-                                                <th className="py-3">3차년도 사유</th>
-                                                <th className="py-3 text-error font-extrabold">총 예상 추징액 (원)</th>
+                                                <th className="py-3">추징 회차</th>
+                                                {summaryYears.slice().sort((a,b) => a-b).map(year => (
+                                                    <th key={year} className="py-3">{year}년</th>
+                                                ))}
+                                                <th className="py-3 text-error font-extrabold">해당 회차 총 예상 추징액 (원)</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {getClawbackData().length > 0 ? getClawbackData().map((cb, idx) => (
-                                                <tr key={idx} className="hover:bg-base-100 border-b border-base-200">
-                                                    <td className="font-bold text-base-content/70">{cb.type}</td>
-                                                    <td className="font-bold">{cb.originYear}년</td>
-                                                    <td className="font-mono text-error">
-                                                        {cb.clawbackY2 > 0 ? (
-                                                            <div className="flex flex-col gap-1 items-center">
-                                                                <span className="text-xs text-error font-bold tracking-tighter opacity-70">[{cb.year2}년]</span>
-                                                                <span>{formatNumber(cb.clawbackY2)}</span>
-                                                            </div>
-                                                        ) : '-'}
-                                                    </td>
-                                                    <td className="text-xs opacity-70">{cb.y2Reason || '-'}</td>
-                                                    <td className="font-mono text-error">
-                                                        {cb.clawbackY3 > 0 ? (
-                                                            <div className="flex flex-col gap-1 items-center">
-                                                                <span className="text-xs text-error font-bold tracking-tighter opacity-70">[{cb.year3}년]</span>
-                                                                <span>{formatNumber(cb.clawbackY3)}</span>
-                                                            </div>
-                                                        ) : '-'}
-                                                    </td>
-                                                    <td className="text-xs opacity-70">{cb.y3Reason || '-'}</td>
-                                                    <td className="font-mono font-bold text-error align-middle">
-                                                        {formatNumber(cb.clawbackY2 + cb.clawbackY3)}
-                                                    </td>
-                                                </tr>
-                                            )) : (
+                                            {getClawbackData().length > 0 ? getClawbackData().map((cb, idx) => {
+                                                return (
+                                                    <React.Fragment key={idx}>
+                                                        <tr className="hover:bg-base-100 border-b border-base-200">
+                                                            <td rowSpan={2} className="font-bold text-base-content/70 align-middle border-r border-base-200">{cb.type}</td>
+                                                            <td rowSpan={2} className="font-bold align-middle border-r border-base-200">{cb.originYear}년</td>
+                                                            <td className="font-bold text-sm bg-base-50 text-left pl-4">2차년도 추징</td>
+                                                            {summaryYears.slice().sort((a,b) => a-b).map(year => {
+                                                                if (year === cb.year2 && cb.clawbackY2 > 0) {
+                                                                    return (
+                                                                        <td key={year} className="font-mono text-error">
+                                                                            <div className="flex flex-col gap-0.5 items-center">
+                                                                                <span>{formatNumber(cb.clawbackY2)}</span>
+                                                                                <span className="text-[10px] opacity-60">({cb.y2Reason})</span>
+                                                                            </div>
+                                                                        </td>
+                                                                    )
+                                                                }
+                                                                return <td key={year} className="text-base-content/20">-</td>
+                                                            })}
+                                                            <td className="font-mono font-bold text-error align-middle">
+                                                                {cb.clawbackY2 > 0 ? formatNumber(cb.clawbackY2) : '-'}
+                                                            </td>
+                                                        </tr>
+                                                        <tr className="hover:bg-base-100 border-b-2 border-base-content/20">
+                                                            <td className="font-bold text-sm bg-base-50 text-left pl-4">3차년도 추징</td>
+                                                            {summaryYears.slice().sort((a,b) => a-b).map(year => {
+                                                                if (year === cb.year3 && cb.clawbackY3 > 0) {
+                                                                    return (
+                                                                        <td key={year} className="font-mono text-error">
+                                                                            <div className="flex flex-col gap-0.5 items-center">
+                                                                                <span>{formatNumber(cb.clawbackY3)}</span>
+                                                                                <span className="text-[10px] opacity-60">({cb.y3Reason})</span>
+                                                                            </div>
+                                                                        </td>
+                                                                    )
+                                                                }
+                                                                return <td key={year} className="text-base-content/20">-</td>
+                                                            })}
+                                                            <td className="font-mono font-bold text-error align-middle">
+                                                                {cb.clawbackY3 > 0 ? formatNumber(cb.clawbackY3) : '-'}
+                                                            </td>
+                                                        </tr>
+                                                    </React.Fragment>
+                                                )
+                                            }) : (
                                                 <tr>
-                                                    <td colSpan="7" className="py-8 text-center text-base-content/50">
+                                                    <td colSpan={summaryYears.length + 4} className="py-8 text-center text-base-content/50">
                                                         추징 발생 예상 내역이 없습니다. (고용 인원 유지/증가)
                                                     </td>
                                                 </tr>
