@@ -142,3 +142,81 @@ export async function generateTaxCreditExcel(processedData, incomeIncreaseResult
     anchor.click();
     window.URL.revokeObjectURL(url);
 }
+
+/**
+ * Generates an Excel file for employees who resigned within 1 year of their hire date.
+ * 
+ * @param {Array} processedData - Array of all employee data.
+ */
+export async function downloadShortTermResignersExcel(processedData) {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Mega-Info Consulting';
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet('1년 이내 퇴사자 명단');
+
+    sheet.columns = [
+        { header: '성명', key: 'name', width: 15 },
+        { header: '주민등록번호', key: 'id', width: 20 },
+        { header: '입사일', key: 'hireDate', width: 15 },
+        { header: '퇴사일', key: 'retireDate', width: 15 },
+        { header: '총급여', key: 'totalSalary', width: 20, style: { numFmt: '#,##0' } },
+    ];
+
+    sheet.getRow(1).font = { bold: true };
+    sheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+    // Group by ID to sum up salaries and find unique hire/retire dates
+    const grouped = {};
+    processedData.forEach(d => {
+        if (!grouped[d.id]) {
+            grouped[d.id] = {
+                name: d.name,
+                id: d.id,
+                hireDate: d.hireDate,
+                retireDate: d.retireDate,
+                totalSalary: 0
+            };
+        }
+        // Update dates if missing (should be consistent, but just in case)
+        if (d.hireDate && !grouped[d.id].hireDate) grouped[d.id].hireDate = d.hireDate;
+        if (d.retireDate && !grouped[d.id].retireDate) grouped[d.id].retireDate = d.retireDate;
+        
+        grouped[d.id].totalSalary += (d.totalSalary || 0);
+    });
+
+    const shortTermResigners = Object.values(grouped).filter(emp => {
+        if (!emp.hireDate || !emp.retireDate) return false;
+        
+        const hDate = new Date(emp.hireDate);
+        const rDate = new Date(emp.retireDate);
+        
+        // Calculate difference in milliseconds
+        const diffTime = Math.abs(rDate - hDate);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+        
+        return diffDays <= 365;
+    }).sort((a, b) => a.name.localeCompare(b.name));
+
+    shortTermResigners.forEach(emp => {
+        sheet.addRow({
+            name: emp.name,
+            id: emp.id,
+            hireDate: emp.hireDate,
+            retireDate: emp.retireDate,
+            totalSalary: emp.totalSalary
+        });
+    });
+
+    // Generate Buffer
+    const buffer = await workbook.xlsx.writeBuffer();
+    
+    // Create Blob and Download
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `1년이내_퇴사자_명단_${new Date().toISOString().slice(0,10)}.xlsx`;
+    anchor.click();
+    window.URL.revokeObjectURL(url);
+}

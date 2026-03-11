@@ -6,7 +6,7 @@ import { calculateEmploymentIncreaseCredit } from '../utils/taxCorrection/employ
 import { calculateSocialInsuranceClaims } from '../utils/taxCorrection/socialInsurance';
 import { calculateIncomeIncreaseCredit } from '../utils/taxCorrection/incomeIncrease';
 import { aggregateTaxCreditSummary } from '../utils/taxCorrection/summaryHelpers';
-import { generateTaxCreditExcel } from '../utils/excelGenerator';
+import { generateTaxCreditExcel, downloadShortTermResignersExcel } from '../utils/excelGenerator';
 
 import { RiseOutlined, TeamOutlined, CalculatorOutlined, FileTextOutlined, SafetyCertificateOutlined, DollarOutlined, ExclamationCircleOutlined, DownloadOutlined, ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 
@@ -1474,7 +1474,16 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
 
                     {/* Employee List (Full View) using Lifted Tabs */}
                     <div className="mt-8">
-                         <h3 className="font-bold text-md mb-4 px-2">전체 사원 리스트 관리</h3>
+                         <div className="flex items-center justify-between mb-4 px-2">
+                             <h3 className="font-bold text-md m-0">전체 사원 리스트 관리</h3>
+                             <div 
+                                 className="badge badge-base h-10 px-4 cursor-pointer font-bold border-none text-white flex items-center gap-2 bg-slate-700 shadow-md"
+                                 onClick={() => downloadShortTermResignersExcel(processedData)}
+                             >
+                                 <DownloadOutlined />
+                                 1년 이내 퇴사자 명단(.xlsx) 추출
+                             </div>
+                         </div>
                          <YearTabs data={processedData}>
                              {(year, yearData) => (
                                  <EmployeeListTable 
