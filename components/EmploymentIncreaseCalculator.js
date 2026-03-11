@@ -1466,9 +1466,9 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {creditResults.annualAverages.filter(stat => stat.year >= 2023).sort((a,b) => b.year - a.year).map((stat) => {
+                                        {creditResults.integratedAverages.filter(stat => stat.year >= 2022).sort((a,b) => b.year - a.year).map((stat) => {
                                             const result = creditResults.integratedEmploymentResults.find(r => r.year === stat.year);
-                                            const prevStat = creditResults.annualAverages.find(r => r.year === stat.year - 1);
+                                            const prevStat = creditResults.integratedAverages.find(r => r.year === stat.year - 1);
                                             
                                             // Calculate YoY Differences
                                             const diffYouth = prevStat ? stat.youthCount - prevStat.youthCount : 0;

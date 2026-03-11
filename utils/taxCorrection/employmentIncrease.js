@@ -13,8 +13,23 @@ export function calculateEmploymentIncreaseCredit(employeeData, settings) {
     // 2. Integrated Employment Credit (New Logic, 2023 onwards)
     const integratedEmploymentResults = calculateIntegratedCredit(annualAverages, settings);
 
+    const integratedAverages = annualAverages.map(stat => {
+        if (stat.year >= 2022 && stat.integratedYouthCount !== undefined) {
+            return {
+                ...stat,
+                youthCount: stat.integratedYouthCount,
+                normalCount: stat.integratedNormalCount,
+                overallCount: Number((stat.integratedYouthCount + stat.integratedNormalCount).toFixed(2)),
+                totalYouthSalary: stat.totalIntegratedYouthSalary,
+                totalNormalSalary: stat.totalIntegratedNormalSalary
+            };
+        }
+        return stat;
+    });
+
     return { 
         annualAverages, 
+        integratedAverages,
         results: employmentIncreaseResults, // Backward compatibility for UI check
         employmentIncreaseResults,
         integratedEmploymentResults 
@@ -30,8 +45,12 @@ function calculateAnnualAverages(employeeData) {
                 year: emp.year, 
                 totalYouthMonths: 0, 
                 totalNormalMonths: 0,
+                totalIntegratedYouthMonths: 0,
+                totalIntegratedNormalMonths: 0,
                 totalYouthSalary: 0,
                 totalNormalSalary: 0,
+                totalIntegratedYouthSalary: 0,
+                totalIntegratedNormalSalary: 0,
                 youthCount: 0,
                 normalCount: 0,
                 overallCount: 0
@@ -39,10 +58,16 @@ function calculateAnnualAverages(employeeData) {
         }
         byYear[emp.year].totalYouthMonths += emp.youthMonths;
         byYear[emp.year].totalNormalMonths += emp.normalMonths;
+        
+        byYear[emp.year].totalIntegratedYouthMonths += (emp.integratedYouthMonths || 0);
+        byYear[emp.year].totalIntegratedNormalMonths += (emp.integratedNormalMonths || 0);
 
         // Aggregate Salaries for Display
         byYear[emp.year].totalYouthSalary += (emp.youthSalary || 0);
         byYear[emp.year].totalNormalSalary += (emp.normalSalary || 0);
+
+        byYear[emp.year].totalIntegratedYouthSalary += (emp.integratedYouthSalary || 0);
+        byYear[emp.year].totalIntegratedNormalSalary += (emp.integratedNormalSalary || 0);
     });
 
     // 2. Calculate Averages
@@ -64,6 +89,10 @@ function calculateAnnualAverages(employeeData) {
         
         // 3. 전체 상시근로자 수 = 청년 상시근로자 수 + 청년 외 상시근로자 수
         stat.overallCount = Number((stat.youthCount + stat.normalCount).toFixed(2));
+        
+        // 통합고용용 상시근로자 수 (만 34세 이하)
+        stat.integratedYouthCount = truncateTo2Decimals(stat.totalIntegratedYouthMonths / 12);
+        stat.integratedNormalCount = truncateTo2Decimals(stat.totalIntegratedNormalMonths / 12);
         
         stat.totalMonths = totalMonths; // UI 표시용 추가
 
@@ -121,7 +150,19 @@ function calculateIntegratedCredit(annualStats, settings) {
     // However, to calculate increase in 2023, we need 2022 data. 
     // So we pass full history, but we only output results for Year >= 2023.
     
-    const results = calculateCumulativeCredits(annualStats, youthRate, otherRate, 2023);
+    const integratedStats = annualStats.map(stat => {
+        if (stat.year >= 2022 && stat.integratedYouthCount !== undefined) {
+            return {
+                ...stat,
+                youthCount: stat.integratedYouthCount,
+                normalCount: stat.integratedNormalCount,
+                overallCount: Number((stat.integratedYouthCount + stat.integratedNormalCount).toFixed(2))
+            };
+        }
+        return stat;
+    });
+
+    const results = calculateCumulativeCredits(integratedStats, youthRate, otherRate, 2023);
     return results.filter(r => r.year >= 2023);
 }
 

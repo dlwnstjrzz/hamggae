@@ -99,6 +99,11 @@ function analyzeYouthStatus(name, id, hireDate, retireDate, row, salaryStartCol,
   let youthSalary = 0;
   let normalSalary = 0;
   let totalSalary = 0;
+  
+  let integratedYouthMonths = 0;
+  let integratedNormalMonths = 0;
+  let integratedYouthSalary = 0;
+  let integratedNormalSalary = 0;
 
   // New fields for Social Insurance
   let socialInsuranceTotalSalary = 0;
@@ -146,11 +151,13 @@ function analyzeYouthStatus(name, id, hireDate, retireDate, row, salaryStartCol,
 
       // Age Calculation at month end
       let isYouth = false;
+      let isIntegratedYouth = false;
       let age = -1;
       
       if (birthDate) {
           age = calculateManAge(birthDate, monthEnd);
           if (age <= 29) isYouth = true;
+          if (age <= 34) isIntegratedYouth = true;
       }
 
       // Employment Status at Month End (Must be employed on the exact last day of the month)
@@ -188,11 +195,17 @@ function analyzeYouthStatus(name, id, hireDate, retireDate, row, salaryStartCol,
       if (isEmployedAtMonthEnd) {
           if (isYouth) youthMonths++;
           else normalMonths++;
+          
+          if (isIntegratedYouth) integratedYouthMonths++;
+          else integratedNormalMonths++;
       }
 
       if (salary > 0) {
           if (isYouth) youthSalary += salary;
           else normalSalary += salary;
+          
+          if (isIntegratedYouth) integratedYouthSalary += salary;
+          else integratedNormalSalary += salary;
 
           // Social Insurance Logic: Exclude salary if it is the resignation month
           // Rule: If an employee resigns in the middle of the month (e.g. 7/8), 
@@ -231,6 +244,10 @@ function analyzeYouthStatus(name, id, hireDate, retireDate, row, salaryStartCol,
       totalSalary,
       youthMonths,
       normalMonths,
+      integratedYouthMonths,
+      integratedNormalMonths,
+      integratedYouthSalary,
+      integratedNormalSalary,
       youthSalary,
       normalSalary,
       socialInsuranceTotalSalary,
@@ -262,6 +279,11 @@ function calculateEmployeeTaxStatus(name, id, hireDate, retireDate, empObj, year
     let youthSalary = 0;
     let normalSalary = 0;
     let totalSalary = 0;
+    
+    let integratedYouthMonths = 0;
+    let integratedNormalMonths = 0;
+    let integratedYouthSalary = 0;
+    let integratedNormalSalary = 0;
   
     let socialInsuranceTotalSalary = 0;
     let socialInsuranceYouthSalary = 0;
@@ -298,6 +320,7 @@ function calculateEmployeeTaxStatus(name, id, hireDate, retireDate, empObj, year
   
         // Age Calculation
         let isYouth = false;
+        let isIntegratedYouth = false;
         let age = -1;
         
         if (birthDate) {
@@ -305,6 +328,7 @@ function calculateEmployeeTaxStatus(name, id, hireDate, retireDate, empObj, year
             // 2025 Revision: 15~29 (up to 35 with military)
             // Simplified for now: <= 29
             if (age <= 29) isYouth = true;
+            if (age <= 34) isIntegratedYouth = true;
         }
   
         // Employment Status (Must be employed on the exact last day of the month)
@@ -341,11 +365,17 @@ function calculateEmployeeTaxStatus(name, id, hireDate, retireDate, empObj, year
         if (isEmployedAtMonthEnd) {
             if (isYouth) youthMonths++;
             else normalMonths++;
+
+            if (isIntegratedYouth) integratedYouthMonths++;
+            else integratedNormalMonths++;
         }
   
         if (salary > 0) {
             if (isYouth) youthSalary += salary;
             else normalSalary += salary;
+            
+            if (isIntegratedYouth) integratedYouthSalary += salary;
+            else integratedNormalSalary += salary;
   
             // Social Insurance Exclusions (Resignation Month)
             let isResignationMonth = false;
@@ -380,6 +410,10 @@ function calculateEmployeeTaxStatus(name, id, hireDate, retireDate, empObj, year
         totalSalary,
         youthMonths,
         normalMonths,
+        integratedYouthMonths,
+        integratedNormalMonths,
+        integratedYouthSalary,
+        integratedNormalSalary,
         youthSalary,
         normalSalary,
         socialInsuranceTotalSalary,
