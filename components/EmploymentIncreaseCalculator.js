@@ -465,14 +465,14 @@ const EmployeeListTable = ({ yearData, onUpdateExclusion, formatNumber, isIntegr
                         </td>
                         <td className="text-center">
                              <select 
-                                className={`select select-ghost font-normal ${emp.exclusionReason ? 'text-error font-bold' : 'text-success font-bold'}`}
-                                value={emp.exclusionReason || ''}
-                                onChange={(e) => onUpdateExclusion(emp, e.target.value || null)}
+                                className={`select select-ghost font-normal ${emp.exclusionReason || (emp.executivePeriods && emp.executivePeriods.length > 0 && !emp.forceIncludeExec) ? 'text-error font-bold' : 'text-success font-bold'}`}
+                                value={emp.exclusionReason || (emp.executivePeriods && emp.executivePeriods.length > 0 && !emp.forceIncludeExec ? 'partial_exec' : 'force_include')}
+                                onChange={(e) => onUpdateExclusion(emp, e.target.value)}
                             >
-                                <option value="" className="text-success font-bold">포함</option>
-                                <option value="임원" className="text-error font-bold">임원</option>
+                                <option value="force_include" className="text-success font-bold">포함</option>
+                                <option value={emp.executivePeriods && emp.executivePeriods.length > 0 ? 'partial_exec' : '임원'} className="text-error font-bold">임원</option>
                                 <option value="최대주주및가족" className="text-error font-bold">최대주주 및 친족</option>
-                                <option value="기타" className="text-base-content">계약직/기타</option>
+                                <option value="기타" className="text-base-content font-bold">계약직/기타</option>
                             </select>
                         </td>
                     </tr>
@@ -527,27 +527,15 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
       const registryFiles = initialData.filter(d => d.type === 'registry');
       const taxReturnFiles = initialData.filter(d => d.type === 'taxReturn');
 
-      let allEmployees = [];
-      withholdingFiles.forEach(file => {
-          if(file.employees) {
-              const year = parseInt(file.year);
-              const analyzed = file.employees.map(emp => {
-                  const data = analyzeEmployee(emp, year);
-                  return { ...data, exclusionReason: null, manualParams: {} };
-              });
-              allEmployees.push(...analyzed);
-          }
-      });
-
       const normalizeName = (name) => {
           if (!name) return '';
           return name.replace(/\(.*\)/g, '').replace(/[0-9]/g, '').replace(/\s/g, '');
       };
 
-      allEmployees = allEmployees.map(emp => {
-          let reason = null;
-          const empNameClean = normalizeName(emp.name);
-          const empIdPrefix = emp.id ? emp.id.split('-')[0] : '';
+      const getExecPeriods = (empName, empId, registryFiles) => {
+          let execPeriods = [];
+          const empNameClean = normalizeName(empName);
+          const empIdPrefix = empId ? empId.split('-')[0] : '';
 
           for (const reg of registryFiles) {
               const executives = reg.executives || [];
@@ -555,18 +543,40 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                   const execNameClean = normalizeName(exec.name);
                   const execIdPrefix = exec.id ? exec.id.split('-')[0] : '';
                   if (empNameClean === execNameClean && ((empIdPrefix && execIdPrefix) ? (empIdPrefix === execIdPrefix) : true)) {
-                      const empYearStart = new Date(`${emp.year}-01-01`);
-                      const empYearEnd = new Date(`${emp.year}-12-31`);
-                      const execStart = exec.startDate ? new Date(exec.startDate) : new Date('1900-01-01');
-                      const execEnd = exec.endDate ? new Date(exec.endDate) : new Date('2999-12-31');
-                      if (execStart <= empYearEnd && execEnd >= empYearStart) {
-                          reason = '임원';
-                          break;
-                      }
+                      execPeriods.push({
+                          start: exec.startDate ? new Date(exec.startDate) : new Date('1900-01-01'),
+                          end: exec.endDate ? new Date(exec.endDate) : new Date('2999-12-31')
+                      });
                   }
               }
-              if (reason) break;
           }
+          return execPeriods;
+      };
+
+      let allEmployees = [];
+      withholdingFiles.forEach(file => {
+          if(file.employees) {
+              const year = parseInt(file.year);
+              const analyzed = file.employees.map(emp => {
+                  const periods = getExecPeriods(emp['성명'], emp['주민등록번호'], registryFiles);
+                  const dataWithExec = analyzeEmployee(emp, year, periods);
+                  const dataFull = analyzeEmployee(emp, year, []);
+                  return { 
+                      ...dataWithExec, 
+                      baseExecStats: {...dataWithExec},
+                      baseFullStats: {...dataFull},
+                      exclusionReason: null, 
+                      forceIncludeExec: false 
+                  };
+              });
+              allEmployees.push(...analyzed);
+          }
+      });
+
+      allEmployees = allEmployees.map(emp => {
+          let reason = null;
+          const empNameClean = normalizeName(emp.name);
+          const empIdPrefix = emp.id ? emp.id.split('-')[0] : '';
 
           if (!reason) {
               for (const tax of taxReturnFiles) {
@@ -635,7 +645,21 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
     const newData = processedData.map(d => {
         if (d.name === empIndex.name && d.id === empIndex.id && d.year === empIndex.year) {
             exists = true;
-            return { ...d, exclusionReason: reason };
+            let newD = { ...d };
+
+            if (reason === 'force_include') {
+                newD.exclusionReason = null;
+                newD.forceIncludeExec = true;
+                if (newD.baseFullStats) Object.assign(newD, newD.baseFullStats);
+            } else if (reason === 'partial_exec') {
+                newD.exclusionReason = null;
+                newD.forceIncludeExec = false;
+                if (newD.baseExecStats) Object.assign(newD, newD.baseExecStats);
+            } else {
+                newD.exclusionReason = reason;
+                newD.forceIncludeExec = false;
+            }
+            return newD;
         }
         return d;
     });
@@ -647,7 +671,8 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
             id: empIndex.id,
             year: empIndex.year,
             totalSalary: 0,
-            exclusionReason: reason,
+            exclusionReason: reason === 'force_include' || reason === 'partial_exec' ? null : reason,
+            forceIncludeExec: reason === 'force_include',
             months: 0,
             normalMonths: 0,
             youthMonths: 0,
@@ -866,7 +891,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
       const grouped = {};
       
       processedData.forEach(d => {
-          if (d.exclusionReason) {
+          if (d.exclusionReason || (d.executivePeriods && d.executivePeriods.length > 0 && !d.forceIncludeExec)) {
               excludedIds.add(d.id);
           }
       });
@@ -942,21 +967,23 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                                           // we construct a dummy object to allow them to be excluded for this year manually
                                           const isExcluded = yearData ? !!yearData.exclusionReason : false;
                                           const currentDataOrDummy = yearData || { id: person.id, name: person.name, year: y, totalSalary: 0, exclusionReason: null };
+                                          const hasExec = yearData && yearData.executivePeriods && yearData.executivePeriods.length > 0 && !yearData.forceIncludeExec;
+                                          const displayValue = currentDataOrDummy.exclusionReason || (hasExec ? 'partial_exec' : 'force_include');
 
                                           return (
-                                              <td key={y} className={`text-sm ${isExcluded ? 'font-bold' : ''}`}>
+                                              <td key={y} className={`text-sm ${isExcluded || hasExec ? 'font-bold' : ''}`}>
                                                   <div className="flex flex-col items-center gap-1">
                                                       <select
-                                                          className={`select select-xs select-bordered ${isExcluded ? 'bg-base-200 text-base-content font-bold border-base-300' : 'bg-base-100 opacity-50 text-base-content/50 border-base-200'}`}
-                                                          value={currentDataOrDummy.exclusionReason || ''}
-                                                          onChange={(e) => updateExclusion(currentDataOrDummy, e.target.value || null)}
+                                                          className={`select select-xs select-bordered ${isExcluded || hasExec ? 'bg-base-200 text-error font-bold border-base-300' : 'bg-base-100 text-base-content font-bold border-base-200'}`}
+                                                          value={displayValue}
+                                                          onChange={(e) => updateExclusion(currentDataOrDummy, e.target.value)}
                                                       >
-                                                          <option value="" className="text-base-content/80 opacity-80">- 제외 안함 -</option>
-                                                          <option value="임원" className="text-base-content font-bold">임원</option>
-                                                          <option value="최대주주및가족" className="text-base-content font-bold">최대주주/친족</option>
+                                                          <option value="force_include" className="text-base-content font-bold">- 제외 안함 -</option>
+                                                          <option value={yearData && yearData.executivePeriods && yearData.executivePeriods.length > 0 ? 'partial_exec' : '임원'} className="text-error font-bold">임원</option>
+                                                          <option value="최대주주및가족" className="text-error font-bold">최대주주/친족</option>
                                                           <option value="기타" className="text-base-content font-bold">계약직/기타</option>
                                                       </select>
-                                                      <div className={`font-mono ${isExcluded ? 'line-through text-base-content/40' : ''}`}>
+                                                      <div className={`font-mono ${isExcluded || hasExec ? 'line-through text-base-content/40' : ''}`}>
                                                           {yearData ? formatNumber(yearData.totalSalary) : '-'}
                                                       </div>
                                                   </div>

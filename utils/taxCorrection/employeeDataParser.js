@@ -261,7 +261,7 @@ function analyzeYouthStatus(name, id, hireDate, retireDate, row, salaryStartCol,
 
 
 // New Adapter for JSON input (from excelParser.js)
-export function analyzeEmployee(empObj, year) {
+export function analyzeEmployee(empObj, year, executivePeriods = []) {
     const name = empObj['성명'];
     const id = empObj['주민등록번호'] || '';
     const hireDate = empObj['입사일'] ? new Date(empObj['입사일']) : null;
@@ -270,10 +270,10 @@ export function analyzeEmployee(empObj, year) {
     // Re-use logic or duplicate for JSON structure?
     // Since the original logic relies on row/col parsing, it's easier to duplicate the core logic adapted for JSON
     
-    return calculateEmployeeTaxStatus(name, id, hireDate, retireDate, empObj, year);
+    return calculateEmployeeTaxStatus(name, id, hireDate, retireDate, empObj, year, executivePeriods);
 }
 
-function calculateEmployeeTaxStatus(name, id, hireDate, retireDate, empObj, year) {
+function calculateEmployeeTaxStatus(name, id, hireDate, retireDate, empObj, year, executivePeriods = []) {
     let youthMonths = 0;
     let normalMonths = 0;
     let youthSalary = 0;
@@ -360,6 +360,25 @@ function calculateEmployeeTaxStatus(name, id, hireDate, retireDate, empObj, year
         if (isHiredBeforeOrOnMonthEnd && !retiredBeforeMonthEnd) {
             isEmployedAtMonthEnd = true;
         }
+
+        // 임원 재직 기간 확인 (취임월부터 제외, 퇴임월부터 포함)
+        if (isEmployedAtMonthEnd && executivePeriods.length > 0) {
+            const currentMonthAbs = year * 12 + (m - 1);
+            let isExecutiveThisMonth = false;
+            
+            for (const exec of executivePeriods) {
+                const startTermMonth = exec.start.getFullYear() * 12 + exec.start.getMonth();
+                const endTermMonth = exec.end ? (exec.end.getFullYear() * 12 + exec.end.getMonth()) : Infinity;
+                
+                if (currentMonthAbs >= startTermMonth && currentMonthAbs < endTermMonth) {
+                    isExecutiveThisMonth = true;
+                    break;
+                }
+            }
+            if (isExecutiveThisMonth) {
+                isEmployedAtMonthEnd = false; // 상시근로자 해당 월 제외
+            }
+        }
   
         // Aggregation
         if (isEmployedAtMonthEnd) {
@@ -421,7 +440,8 @@ function calculateEmployeeTaxStatus(name, id, hireDate, retireDate, empObj, year
         socialInsuranceNormalSalary,
         socialInsuranceExcludedSalary,
         resignationExcludedMonth,
-        isYouth: youthMonths > 0
+        isYouth: youthMonths > 0,
+        executivePeriods
     };
 }
 
