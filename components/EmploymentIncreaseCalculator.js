@@ -341,7 +341,7 @@ const IncomeCohortCard = ({ record, formatNumber }) => {
 
 
 
-const EmployeeListTable = ({ yearData, onUpdateExclusion, formatNumber }) => {
+const EmployeeListTable = ({ yearData, onUpdateExclusion, formatNumber, isIntegrated = false }) => {
     const [sortConfig, setSortConfig] = useState({ key: null, direction: 'desc' });
 
     const handleSort = (key) => {
@@ -357,8 +357,15 @@ const EmployeeListTable = ({ yearData, onUpdateExclusion, formatNumber }) => {
         let items = [...yearData];
         if (sortConfig.key) {
             items.sort((a, b) => {
-                let valA = a[sortConfig.key] || 0;
-                let valB = b[sortConfig.key] || 0;
+                let keyA = sortConfig.key;
+                let keyB = sortConfig.key;
+                if (isIntegrated) {
+                    if (keyA === 'youthMonths') { keyA = 'integratedYouthMonths'; keyB = 'integratedYouthMonths'; }
+                    else if (keyA === 'normalMonths') { keyA = 'integratedNormalMonths'; keyB = 'integratedNormalMonths'; }
+                }
+                
+                let valA = a[keyA] || 0;
+                let valB = b[keyB] || 0;
                 
                 if (sortConfig.key === 'name') {
                     return sortConfig.direction === 'asc' 
@@ -443,16 +450,16 @@ const EmployeeListTable = ({ yearData, onUpdateExclusion, formatNumber }) => {
                             {formatNumber(emp.totalSalary)}
                         </td>
                         <td className="text-center text-sm">
-                            {emp.youthMonths > 0 ? (
+                            {(isIntegrated ? emp.integratedYouthMonths : emp.youthMonths) > 0 ? (
                                 <span className={`font-bold ${emp.exclusionReason ? 'opacity-30' : ''}`}>
-                                    {emp.youthMonths}개월
+                                    {isIntegrated ? emp.integratedYouthMonths : emp.youthMonths}개월
                                 </span>
                             ) : <span className="opacity-20">-</span>}
                         </td>
                         <td className="text-center text-sm">
-                            {emp.normalMonths > 0 ? (
+                            {(isIntegrated ? emp.integratedNormalMonths : emp.normalMonths) > 0 ? (
                                 <span className="font-medium opacity-60">
-                                    {emp.normalMonths}개월
+                                    {isIntegrated ? emp.integratedNormalMonths : emp.normalMonths}개월
                                 </span>
                             ) : <span className="opacity-20">-</span>}
                         </td>
@@ -476,10 +483,10 @@ const EmployeeListTable = ({ yearData, onUpdateExclusion, formatNumber }) => {
                      <td colSpan={2} className="text-center font-bold">합 계</td>
                      <td colSpan={2}></td>
                      <td className="text-center font-mono">
-                         {(sortedData.reduce((acc, emp) => acc + (emp.youthMonths || 0), 0)).toFixed(2)}
+                         {(sortedData.reduce((acc, emp) => acc + (isIntegrated ? (emp.integratedYouthMonths || 0) : (emp.youthMonths || 0)), 0)).toFixed(2)}
                      </td>
                      <td className="text-center font-mono">
-                         {(sortedData.reduce((acc, emp) => acc + (emp.normalMonths || 0), 0)).toFixed(2)}
+                         {(sortedData.reduce((acc, emp) => acc + (isIntegrated ? (emp.integratedNormalMonths || 0) : (emp.normalMonths || 0)), 0)).toFixed(2)}
                      </td>
                      <td></td>
                  </tr>
@@ -1615,12 +1622,13 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                      {/* Regular Employee List */}
                      <div className="mt-8">
                          <h3 className="font-bold text-md mb-4 px-2">연도별 상시근로자 리스트</h3>
-                          <YearTabs data={processedData.filter(d => d.year >= 2023)}>
+                          <YearTabs data={processedData.filter(d => d.year >= 2022)}>
                              {(year, yearData) => (
                                  <EmployeeListTable 
                                      yearData={yearData} 
                                      onUpdateExclusion={updateExclusion}
                                      formatNumber={formatNumber}
+                                     isIntegrated={true}
                                  />
                              )}
                          </YearTabs>
