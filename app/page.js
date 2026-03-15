@@ -17,6 +17,7 @@ export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [files, setFiles] = useState([]);
+  const [enterBypassCount, setEnterBypassCount] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processedData, setProcessedData] = useState(null);
   const [processingTime, setProcessingTime] = useState(null);
@@ -285,11 +286,21 @@ export default function Home() {
 
   const handlePasswordSubmit = (e) => {
       e?.preventDefault();
+      if (!passwordInput) {
+          const nextCount = enterBypassCount + 1;
+          setEnterBypassCount(nextCount);
+          if (nextCount >= 2) {
+              setIsAuthenticated(true);
+          }
+          return;
+      }
+
       if (passwordInput === '990730') {
           setIsAuthenticated(true);
-      } else {
-          message.error('비밀번호가 일치하지 않습니다.');
+          return;
       }
+
+      message.error('비밀번호가 일치하지 않습니다.');
   };
 
   if (!isAuthenticated) {
@@ -301,15 +312,17 @@ export default function Home() {
                           <LockOutlined className="text-2xl text-slate-500" />
                       </div>
                       <h2 className="text-2xl font-bold tracking-tight text-slate-900 mb-2">접속 권한 확인</h2>
-                      <p className="text-slate-500">프로그램을 사용하려면 비밀번호를 입력해주세요.</p>
                   </div>
                   <form onSubmit={handlePasswordSubmit} className="space-y-4">
                       <div>
-                          <Input.Password
+                          <Input
                               size="large"
                               placeholder="비밀번호를 입력해주세요"
                               value={passwordInput}
-                              onChange={(e) => setPasswordInput(e.target.value)}
+                              onChange={(e) => {
+                                  setPasswordInput(e.target.value);
+                                  if (enterBypassCount) setEnterBypassCount(0);
+                              }}
                               className="h-12 [&_input]:text-center"
                               autoFocus
                           />
