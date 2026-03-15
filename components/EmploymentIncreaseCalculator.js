@@ -627,7 +627,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
       const insuranceRes = calculateSocialInsuranceClaims(validEmployees, { isNewGrowth: false });
       setSocialInsuranceResults(insuranceRes);
 
-      const incomeRes = calculateIncomeIncreaseCredit(validEmployees, currentSettings);
+      const incomeRes = calculateIncomeIncreaseCredit(data, currentSettings);
       setIncomeIncreaseResults(incomeRes);
       
       const summary = aggregateTaxCreditSummary(creditRes, insuranceRes, incomeRes);

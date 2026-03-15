@@ -57,8 +57,35 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
         return id1 === id2;
     };
 
+    const normalizeDate = (value, fallback) => {
+        if (!value) return fallback;
+        if (value instanceof Date) return value;
+        const parsed = new Date(value);
+        return Number.isNaN(parsed.getTime()) ? fallback : parsed;
+    };
+
+    const isExecutiveInYear = (emp, targetYear) => {
+        if (!emp.executivePeriods || emp.executivePeriods.length === 0) return false;
+        const yearStart = new Date(targetYear, 0, 1);
+        const yearEnd = new Date(targetYear, 11, 31);
+
+        return emp.executivePeriods.some(period => {
+            const start = normalizeDate(period.start, new Date('1900-01-01'));
+            const end = normalizeDate(period.end, new Date('2999-12-31'));
+            return start <= yearEnd && end >= yearStart;
+        });
+    };
+
     // Helper to determine accurate exclusion status
     const getExclusionStatus = (emp, targetYear) => {
+        if (emp.exclusionReason) {
+            return { isExcluded: true, reason: emp.exclusionReason };
+        }
+
+        if (!emp.forceIncludeExec && isExecutiveInYear(emp, targetYear)) {
+            return { isExcluded: true, reason: '임원' };
+        }
+
         // 1. Must be employed at Year End of Target Year
         if (!isEmployedAtYearEnd(emp, targetYear)) {
             return { isExcluded: true, reason: '연말 기준 미재직' };
