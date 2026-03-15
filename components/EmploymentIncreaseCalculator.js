@@ -886,6 +886,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
   const ExclusionList = () => {
       if (processedData.length === 0) return null;
       const allYears = [...new Set(processedData.map(d => d.year))].sort((a,b) => a-b);
+      const [excludeQuery, setExcludeQuery] = useState('');
       
       const excludedIds = new Set(manuallyExcludedIds);
       const grouped = {};
@@ -908,6 +909,24 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
       const uniqueNonExcludedEmployees = Array.from(
           new Set(processedData.filter(d => !excludedIds.has(d.id)).map(d => JSON.stringify({id: d.id, name: d.name})))
       ).map(str => JSON.parse(str)).sort((a,b) => a.name.localeCompare(b.name));
+      const normalizedQuery = excludeQuery.replace(/\s/g, '').toLowerCase();
+      const filteredEmployees = normalizedQuery
+          ? uniqueNonExcludedEmployees.filter(emp => {
+              const name = (emp.name || '').replace(/\s/g, '').toLowerCase();
+              const id = (emp.id || '').replace(/\s/g, '').toLowerCase();
+              return name.includes(normalizedQuery) || id.includes(normalizedQuery);
+          })
+          : [];
+      const addExcludedEmployee = (selectedId) => {
+          if (!selectedId) return;
+          setManuallyExcludedIds(prev => new Set(prev).add(selectedId));
+          // We must also create empty records for this ID for all years so it shows up in table loop
+          const empData = processedData.find(d => d.id === selectedId);
+          if (empData) {
+              // Force re-render by doing a no-op update on processedData or just relying on manuallyExcludedIds
+          }
+          setExcludeQuery('');
+      };
 
       return (
           <div className="card bg-base-100 shadow-sm border border-base-200 mt-8">
@@ -916,27 +935,34 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                       <h3 className="card-title text-base-content flex items-center gap-2 m-0">
                           <span className="text-xl">🚫</span> 제외 대상자 명단
                       </h3>
-                      <select 
-                          className="select select-sm select-bordered w-full max-w-[200px]"
-                          onChange={(e) => {
-                              if(e.target.value) {
-                                  const selectedId = e.target.value;
-                                  setManuallyExcludedIds(prev => new Set(prev).add(selectedId));
-                                  // We must also create empty records for this ID for all years so it shows up in table loop
-                                  const empData = processedData.find(d => d.id === selectedId);
-                                  if (empData) {
-                                      // Force re-render by doing a no-op update on processedData or just relying on manuallyExcludedIds
+                      <div className="w-full max-w-[240px] relative">
+                          <input
+                              type="text"
+                              className="input input-sm input-bordered w-full"
+                              placeholder="+ 사원 검색하여 추가"
+                              value={excludeQuery}
+                              onChange={(e) => setExcludeQuery(e.target.value)}
+                              onKeyDown={(e) => {
+                                  if (e.key === 'Enter' && filteredEmployees.length === 1) {
+                                      addExcludedEmployee(filteredEmployees[0].id);
                                   }
-                                  e.target.value = "";
-                              }
-                          }}
-                          value=""
-                      >
-                          <option value="" disabled>+ 사원 선택하여 추가</option>
-                          {uniqueNonExcludedEmployees.map(emp => (
-                              <option key={emp.id} value={emp.id}>{emp.name} ({emp.id})</option>
-                          ))}
-                      </select>
+                              }}
+                          />
+                          {filteredEmployees.length > 0 && (
+                              <div className="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto rounded-md border border-base-200 bg-base-100 shadow">
+                                  {filteredEmployees.slice(0, 8).map(emp => (
+                                      <button
+                                          key={emp.id}
+                                          type="button"
+                                          className="w-full text-left px-3 py-2 hover:bg-base-200 text-sm"
+                                          onClick={() => addExcludedEmployee(emp.id)}
+                                      >
+                                          {emp.name} ({emp.id})
+                                      </button>
+                                  ))}
+                              </div>
+                          )}
+                      </div>
                   </div>
                   <div className="overflow-x-auto">
                       <table className="table text-center">

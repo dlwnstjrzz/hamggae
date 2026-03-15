@@ -223,6 +223,7 @@ function calculateCumulativeCredits(annualStats, youthRate, otherRate, startYear
     }
 
     // Step 2: Calculate Receivable Credit for each year T (Summing valid 1st, 2nd, 3rd claims)
+    const statsByYear = new Map(annualStats.map(stat => [stat.year, stat]));
     annualStats.forEach(stat => {
         const targetYear = stat.year;
         const currentOverallCount = stat.overallCount;
@@ -250,7 +251,9 @@ function calculateCumulativeCredits(annualStats, youthRate, otherRate, startYear
         const prev2Year = targetYear - 2;
         const credit3rdObj = initialCredits[prev2Year];
         let credit3rd = 0;
-        if (credit3rdObj && currentOverallCount >= credit3rdObj.requiredMaintenanceCount) {
+        const secondYearStat = statsByYear.get(prev2Year + 1);
+        const failedInSecondYear = !!(credit3rdObj && secondYearStat && secondYearStat.overallCount < credit3rdObj.requiredMaintenanceCount);
+        if (credit3rdObj && !failedInSecondYear && currentOverallCount >= credit3rdObj.requiredMaintenanceCount) {
             let youthDec = Math.max(0, credit3rdObj.requiredMaintenanceYouthCount - stat.youthCount);
             if (youthDec > 0) {
                 let effectiveYouth = Math.max(0, credit3rdObj.youthIncreaseRecognized - youthDec);
