@@ -96,7 +96,6 @@ export default function Home() {
     try {
       for (const file of files) {
         try {
-          // processPDF expects a File object
           const data = await processPDF(file);
           results.push(data);
         } catch (err) {
@@ -104,9 +103,19 @@ export default function Home() {
           message.error(`${file.name} 처리 실패`);
         }
       }
+      
+      // 사용자 요청: 웹 분석 시에도 '통합 엑셀 자료'를 생성 후 다시 읽어오는 Flow와 완전히 동일하게 처리
+      const buffer = await generateExcel(results);
+      const mockFile = new File([buffer], "integrated_temp.xlsx", { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const parsedExcelData = await parseExcel(mockFile);
+      
+      // parseExcel은 taxReturn(법인세신고서)를 처리하지 않으므로 원본 유지
+      const taxReturns = results.filter(r => r.type === 'taxReturn');
+      const finalData = [...parsedExcelData, ...taxReturns];
+
       const endTime = performance.now();
       setProcessingTime((endTime - startTime) / 1000);
-      setProcessedData(results);
+      setProcessedData(finalData);
       message.success('데이터 처리가 완료되었습니다.');
       setCurrentStep(1);
     } catch (err) {

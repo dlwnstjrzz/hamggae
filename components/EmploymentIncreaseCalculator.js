@@ -533,9 +533,10 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
       };
 
       const getExecPeriods = (empName, empId, registryFiles) => {
-          let execPeriods = [];
           const empNameClean = normalizeName(empName);
           const empIdPrefix = empId ? empId.split('-')[0] : '';
+          
+          let allHistoryEvents = [];
 
           for (const reg of registryFiles) {
               const executives = reg.executives || [];
@@ -543,14 +544,40 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                   const execNameClean = normalizeName(exec.name);
                   const execIdPrefix = exec.id ? exec.id.split('-')[0] : '';
                   if (empNameClean === execNameClean && ((empIdPrefix && execIdPrefix) ? (empIdPrefix === execIdPrefix) : true)) {
-                      execPeriods.push({
-                          start: exec.startDate ? new Date(exec.startDate) : new Date('1900-01-01'),
-                          end: exec.endDate ? new Date(exec.endDate) : new Date('2999-12-31')
-                      });
+                      if (exec.history && exec.history.length > 0) {
+                          allHistoryEvents.push(...exec.history);
+                      } else if (exec.startDate) {
+                          allHistoryEvents.push({ date: exec.startDate, type: '취임' });
+                          if (exec.endDate) allHistoryEvents.push({ date: exec.endDate, type: '사임' });
+                      }
                   }
               }
           }
-          return execPeriods;
+
+          if (allHistoryEvents.length === 0) return [];
+
+          const uniqueHistory = [];
+          const seen = new Set();
+          allHistoryEvents.sort((a,b) => new Date(a.date) - new Date(b.date));
+          allHistoryEvents.forEach(evt => {
+              const k = `${evt.date}_${evt.type}`;
+              if (!seen.has(k)) {
+                  seen.add(k);
+                  uniqueHistory.push(evt);
+              }
+          });
+
+          let startDate = uniqueHistory[0].date;
+          let endDate = null;
+          const lastEvent = uniqueHistory[uniqueHistory.length - 1];
+          if (['사임', '퇴임', '만료', '해임'].includes(lastEvent.type)) {
+              endDate = lastEvent.date;
+          }
+
+          return [{
+              start: new Date(startDate),
+              end: endDate ? new Date(endDate) : new Date('2999-12-31')
+          }];
       };
 
       let allEmployees = [];

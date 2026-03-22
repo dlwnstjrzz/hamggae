@@ -252,9 +252,17 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
 
         // 3. Calculate Rates
         // Formula: Growth Rate(Y) = (AvgWage(Y, Excl New Hires) - AvgWage(Y-1, Standard)) / AvgWage(Y-1, Standard)
+        const truncateRate = (rate) => {
+            if (rate === null || rate === undefined) return rate;
+            const pct = rate * 100;
+            // Float safe truncation at 2nd decimal of percentage (i.e. 12.349 -> 12.34)
+            const [intPart, decPart] = pct.toFixed(5).split('.');
+            return parseFloat(`${intPart}.${decPart.substring(0, 2)}`) / 100;
+        };
+
         const getRate = (curExcl, prevStd) => {
             if (!prevStd || prevStd <= 0) return null; // Avoid division by zero
-            return (curExcl - prevStd) / prevStd;
+            return truncateRate((curExcl - prevStd) / prevStd);
         };
 
         // Standard Wages (for Denominators and Excess Calc)
@@ -290,7 +298,9 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
 
         let avgRateLast3Years = 0;
         if (ratesLast3Years.length > 0) {
-             avgRateLast3Years = ratesLast3Years.reduce((a,b) => a+b, 0) / ratesLast3Years.length;
+             // 사용자 요청: 3년 평균 증가율 중 음수가 있으면 0%로 간주하고 평균 계산
+             const avg = ratesLast3Years.reduce((sum, val) => sum + Math.max(0, val), 0) / ratesLast3Years.length;
+             avgRateLast3Years = truncateRate(avg);
         }
 
         // 4. Calculate Credit
