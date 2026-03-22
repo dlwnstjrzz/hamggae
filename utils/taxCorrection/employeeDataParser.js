@@ -316,7 +316,6 @@ function calculateEmployeeTaxStatus(name, id, hireDate, retireDate, empObj, year
         const bonVal = empObj.monthly_bonus ? (empObj.monthly_bonus[m] || 0) : 0;
         
         salary = salVal + bonVal;
-        totalSalary += salary;
   
         // Age Calculation
         let isYouth = false;
@@ -362,9 +361,9 @@ function calculateEmployeeTaxStatus(name, id, hireDate, retireDate, empObj, year
         }
 
         // 임원 재직 기간 확인 (취임월부터 제외, 퇴임월부터 포함)
-        if (isEmployedAtMonthEnd && executivePeriods.length > 0) {
+        let isExecutiveThisMonth = false;
+        if (executivePeriods.length > 0) {
             const currentMonthAbs = year * 12 + (m - 1);
-            let isExecutiveThisMonth = false;
             
             for (const exec of executivePeriods) {
                 const startTermMonth = exec.start.getFullYear() * 12 + exec.start.getMonth();
@@ -375,10 +374,14 @@ function calculateEmployeeTaxStatus(name, id, hireDate, retireDate, empObj, year
                     break;
                 }
             }
-            if (isExecutiveThisMonth) {
-                isEmployedAtMonthEnd = false; // 상시근로자 해당 월 제외
-            }
         }
+
+        if (isExecutiveThisMonth) {
+            isEmployedAtMonthEnd = false; // 상시근로자 해당 월 제외
+            salary = 0; // 해당 월 급여 완전 제외
+        }
+
+        totalSalary += salary;
   
         // Aggregation
         if (isEmployedAtMonthEnd) {

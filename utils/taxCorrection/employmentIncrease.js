@@ -104,28 +104,38 @@ function calculateAnnualAverages(employeeData) {
 
 // Logic A: Employment Increase Credit (Old System - But showing all years)
 function calculateCreditAmounts(annualStats, settings) {
-    // Deduction Rates (Unit: 10,000 KRW)
-    let youthRate = 0;
-    let otherRate = 0;
+    const getRates = (year) => {
+        let youthRate = 0;
+        let otherRate = 0;
 
-    if (settings.size === 'small') {
-        if (settings.region === 'capital') {
-            youthRate = 1100;
-            otherRate = 700;
+        if (settings.size === 'small') {
+            if (settings.region === 'capital') {
+                youthRate = 1100;
+                otherRate = 700;
+            } else {
+                if (year === 2021 || year === 2022) {
+                    youthRate = 1300;
+                } else {
+                    youthRate = 1200;
+                }
+                otherRate = 770;
+            }
+        } else if (settings.size === 'middle') {
+            if (year === 2021 || year === 2022) {
+                youthRate = 900;
+            } else {
+                youthRate = 800;
+            }
+            otherRate = 450;
         } else {
-            youthRate = 1200;
-            otherRate = 770;
+            // Large
+            youthRate = 0;
+            otherRate = 0;
         }
-    } else if (settings.size === 'middle') {
-        youthRate = 800;
-        otherRate = 450;
-    } else {
-        // Large
-        youthRate = 0;
-        otherRate = 0;
-    }
+        return { youthRate, otherRate };
+    };
 
-    return calculateCumulativeCredits(annualStats, youthRate, otherRate);
+    return calculateCumulativeCredits(annualStats, (year) => getRates(year).youthRate, (year) => getRates(year).otherRate);
 }
 
 // Logic B: Integrated Employment Credit (New System - From 2023)
@@ -179,6 +189,9 @@ function calculateCumulativeCredits(annualStats, youthRate, otherRate, startYear
         const diffOverall = Number((current.overallCount - prev.overallCount).toFixed(2));
         const diffYouth = Number((current.youthCount - prev.youthCount).toFixed(2));
         
+        let yRate = typeof youthRate === 'function' ? youthRate(current.year) : youthRate;
+        let oRate = typeof otherRate === 'function' ? otherRate(current.year) : otherRate;
+
         let creditAmount = 0;
         let youthIncreaseRecognized = 0;
         let otherIncreaseRecognized = 0;
@@ -191,7 +204,7 @@ function calculateCumulativeCredits(annualStats, youthRate, otherRate, startYear
                 youthIncreaseRecognized = 0;
             }
             otherIncreaseRecognized = Number((diffOverall - youthIncreaseRecognized).toFixed(2));
-            creditAmount = (youthIncreaseRecognized * youthRate) + (otherIncreaseRecognized * otherRate);
+            creditAmount = (youthIncreaseRecognized * yRate) + (otherIncreaseRecognized * oRate);
         }
 
         // Store credit generated in Year T
@@ -199,25 +212,14 @@ function calculateCumulativeCredits(annualStats, youthRate, otherRate, startYear
             initialCredits[current.year] = {
                 year: current.year,
                 creditAmount: Math.floor(creditAmount * 10000), 
-                baseOverallCount: prev.overallCount, // Baseline for maintenance check usually compares T (current) vs T-1 (inception year prev). 
-                // Simplified Rule: To get 2nd/3rd year payment, Current Overall Count must be >= Overall Count of the year CREDIT WAS GENERATED? 
-                // No, standard rule is maintaining the *increase*.
-                // Let's stick to the previous implemented logic: Maintain >= Inception Year's Overall Count? 
-                // Previous code used: `requiredMaintenanceCount: current.overallCount` (Current at inception)
-                // Wait, if I increased from 10 to 12. I get credit for 2. 
-                // Next year, if I have 11. I decreased by 1. Do I lose everything?
-                // For simplifiction in this prototype, we used a strict maintenance check.
-                requiredMaintenanceCount: prev.overallCount, // Actually, to maintain the *increase*, we usually compare against Base Year. 
-                // But let's follow the previous code's implied logic which was checking against `current.overallCount`?
-                // Re-reading previous code: `requiredMaintenanceCount: current.overallCount`.
-                // If I had 10 -> 12. current is 12. required is 12.
-                // Next year if I have 11. 11 < 12. I get 0.
-                // This is a "All or Nothing" approach for the prototype. User hasn't complained.
+                baseOverallCount: prev.overallCount, 
                 requiredMaintenanceCount: current.overallCount,
                 requiredMaintenanceYouthCount: current.youthCount,
                 
                 youthIncreaseRecognized,
-                otherIncreaseRecognized
+                otherIncreaseRecognized,
+                appliedYouthRate: yRate,
+                appliedOtherRate: oRate
             };
         }
     }
@@ -241,7 +243,9 @@ function calculateCumulativeCredits(annualStats, youthRate, otherRate, startYear
             if (youthDec > 0) {
                 let effectiveYouth = Math.max(0, credit2ndObj.youthIncreaseRecognized - youthDec);
                 let effectiveOther = (credit2ndObj.youthIncreaseRecognized + credit2ndObj.otherIncreaseRecognized) - effectiveYouth;
-                credit2nd = Math.floor((effectiveYouth * youthRate + effectiveOther * otherRate) * 10000);
+                let yRate = credit2ndObj.appliedYouthRate;
+                let oRate = credit2ndObj.appliedOtherRate;
+                credit2nd = Math.floor((effectiveYouth * yRate + effectiveOther * oRate) * 10000);
             } else {
                 credit2nd = credit2ndObj.creditAmount;
             }
@@ -258,7 +262,9 @@ function calculateCumulativeCredits(annualStats, youthRate, otherRate, startYear
             if (youthDec > 0) {
                 let effectiveYouth = Math.max(0, credit3rdObj.youthIncreaseRecognized - youthDec);
                 let effectiveOther = (credit3rdObj.youthIncreaseRecognized + credit3rdObj.otherIncreaseRecognized) - effectiveYouth;
-                credit3rd = Math.floor((effectiveYouth * youthRate + effectiveOther * otherRate) * 10000);
+                let yRate = credit3rdObj.appliedYouthRate;
+                let oRate = credit3rdObj.appliedOtherRate;
+                credit3rd = Math.floor((effectiveYouth * yRate + effectiveOther * oRate) * 10000);
             } else {
                 credit3rd = credit3rdObj.creditAmount;
             }
@@ -270,6 +276,10 @@ function calculateCumulativeCredits(annualStats, youthRate, otherRate, startYear
             const diffOverall = credit1stObj ? Number((stat.overallCount - credit1stObj.baseOverallCount).toFixed(2)) : 0;
             const youthInc = credit1stObj ? credit1stObj.youthIncreaseRecognized : 0;
             const otherInc = credit1stObj ? credit1stObj.otherIncreaseRecognized : 0;
+            
+            let actObj = credit1stObj || credit2ndObj || credit3rdObj;
+            const yRate = actObj ? actObj.appliedYouthRate : (typeof youthRate === 'function' ? youthRate(targetYear) : youthRate);
+            const oRate = actObj ? actObj.appliedOtherRate : (typeof otherRate === 'function' ? otherRate(targetYear) : otherRate);
             
             const totalCredit = credit1st + credit2nd + credit3rd;
             
@@ -283,9 +293,9 @@ function calculateCumulativeCredits(annualStats, youthRate, otherRate, startYear
                     credit2nd,
                     credit3rd,
                     totalCredit: totalCredit,
-                    youthRate,
-                    otherRate,
-                    calcDetails: `청년등: ${youthInc}명 × ${youthRate}만원 + 청년외: ${otherInc}명 × ${otherRate}만원`
+                    youthRate: yRate,
+                    otherRate: oRate,
+                    calcDetails: `청년등: ${youthInc}명 × ${yRate}만원 + 청년외: ${otherInc}명 × ${oRate}만원`
                 });
             }
         }
