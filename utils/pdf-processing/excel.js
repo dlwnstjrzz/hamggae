@@ -546,14 +546,23 @@ export async function generateExcel(results) {
       });
 
       emps.forEach(emp => {
+        // 급여계: monthly_salary 합계 또는 총급여액 또는 급여계 필드
+        const salaryTotal = emp.monthly_salary
+          ? Object.values(emp.monthly_salary).reduce((a, b) => a + (b || 0), 0)
+          : (emp.총급여액 || emp['급여계'] || 0);
+        // 상여계: monthly_bonus 합계 또는 총상여액 또는 상여계 필드
+        const bonusTotal = emp.monthly_bonus
+          ? Object.values(emp.monthly_bonus).reduce((a, b) => a + (b || 0), 0)
+          : (emp.총상여액 || emp['상여계'] || 0);
+
         const rowData = [
           emp.성명,
           emp.주민등록번호,
           emp.입사일,
           emp.퇴사일,
-          emp.총급여액,
-          emp.총상여액,
-          emp.총급여액 + emp.총상여액
+          salaryTotal,
+          bonusTotal,
+          salaryTotal + bonusTotal
         ];
         for (let i = 1; i <= 12; i++) rowData.push(emp.monthly_salary[i]);
         for (let i = 1; i <= 12; i++) rowData.push(emp.monthly_bonus[i]);
