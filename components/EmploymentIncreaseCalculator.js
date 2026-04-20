@@ -946,12 +946,25 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
           : [];
       const addExcludedEmployee = (selectedId) => {
           if (!selectedId) return;
-          setManuallyExcludedIds(prev => new Set(prev).add(selectedId));
-          // We must also create empty records for this ID for all years so it shows up in table loop
-          const empData = processedData.find(d => d.id === selectedId);
-          if (empData) {
-              // Force re-render by doing a no-op update on processedData or just relying on manuallyExcludedIds
+          
+          // Modify processedData by defaulting to '임원' for all years for this person
+          let newData = [...processedData];
+          let updated = false;
+          newData = newData.map(d => {
+              if (d.id === selectedId) {
+                  updated = true;
+                  return { ...d, exclusionReason: '임원', forceIncludeExec: false };
+              }
+              return d;
+          });
+
+          if (updated) {
+              setProcessedData(newData);
+              setIsCalculated(false);
+              setShowClawback(false);
           }
+
+          setManuallyExcludedIds(prev => new Set(prev).add(selectedId));
           setExcludeQuery('');
       };
 
