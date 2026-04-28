@@ -143,6 +143,57 @@ export async function parseExcel(file) {
     });
   });
 
+  // --- Masking Synchronization Logic ---
+  // If ANY employee in ANY year is masked, mask ALL employees' IDs in ALL years.
+  let hasAnyMaskedId = false;
+  
+  for (const result of results) {
+      if (result.type === 'registry' && result.executives) {
+          for (const exec of result.executives) {
+              if (exec.id && String(exec.id).includes('*')) {
+                  hasAnyMaskedId = true;
+                  break;
+              }
+          }
+      } else if (result.type === 'withholding' && result.employees) {
+          for (const emp of result.employees) {
+              if (emp['주민등록번호'] && String(emp['주민등록번호']).includes('*')) {
+                  hasAnyMaskedId = true;
+                  break;
+              }
+          }
+      }
+      if (hasAnyMaskedId) break;
+  }
+
+  if (hasAnyMaskedId) {
+      console.log('[DEBUG] Masked ID found. Masking all IDs across all years.');
+      const maskId = (idStr) => {
+          if (!idStr) return idStr;
+          const str = String(idStr).trim();
+          if (str.includes('*')) return str; // Already masked
+          
+          if (str.includes('-')) {
+              return str.substring(0, 8) + '******'; // YYMMDD-G******
+          } else if (str.length >= 7) {
+              return str.substring(0, 7) + '******'; // YYMMDDG******
+          }
+          return str; // Fallback
+      };
+
+      for (const result of results) {
+          if (result.type === 'registry' && result.executives) {
+              for (const exec of result.executives) {
+                  exec.id = maskId(exec.id);
+              }
+          } else if (result.type === 'withholding' && result.employees) {
+              for (const emp of result.employees) {
+                  emp['주민등록번호'] = maskId(emp['주민등록번호']);
+              }
+          }
+      }
+  }
+
   console.log('[DEBUG] Final Results:', results);
   return results;
 }
