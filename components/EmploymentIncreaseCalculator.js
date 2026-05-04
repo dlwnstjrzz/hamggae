@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { analyzeEmployee } from '../utils/taxCorrection/employeeDataParser';
 import { calculateEmploymentIncreaseCredit } from '../utils/taxCorrection/employmentIncrease';
 import { calculateSocialInsuranceClaims } from '../utils/taxCorrection/socialInsurance';
@@ -496,7 +496,7 @@ const EmployeeListTable = ({ yearData, onUpdateExclusion, formatNumber, isIntegr
   );
 };
 
-export default function EmploymentIncreaseCalculator({ initialData }) {
+export default function EmploymentIncreaseCalculator({ initialData, initialSessionState = null, onStateChange }) {
   const [processedData, setProcessedData] = useState([]);
   const [activeMainTab, setActiveMainTab] = useState('summary'); // 'summary', 'employment', 'integrated', 'social', 'income'
   const [activeYearTab, setActiveYearTab] = useState(null); // Managed via radio inputs for tabs-lifted
@@ -518,6 +518,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
   
   // Tax Credit Choice for 2023+ (integrated vs separated)
   const [taxCreditChoice, setTaxCreditChoice] = useState('integrated'); // 'integrated' | 'separated'
+  const isRestoringRef = useRef(false);
 
   // 1. Initial Data Processing
   useEffect(() => {
@@ -624,26 +625,70 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
           return { ...emp, exclusionReason: reason };
       });
 
-      setProcessedData(allEmployees);
+      const restoredData = Array.isArray(initialSessionState?.processedData) && initialSessionState.processedData.length > 0
+          ? initialSessionState.processedData
+          : allEmployees;
+      const restoredSettings = initialSessionState?.settings || settings;
+      const restoredActiveMainTab = initialSessionState?.activeMainTab || 'summary';
+      const restoredTaxCreditChoice = initialSessionState?.taxCreditChoice || 'integrated';
+      const restoredShowClawback = Boolean(initialSessionState?.showClawback);
+      const restoredManualIds = new Set(initialSessionState?.manuallyExcludedIds || []);
+
+      isRestoringRef.current = Boolean(initialSessionState);
+      setProcessedData(restoredData);
+      setSettings(restoredSettings);
+      setActiveMainTab(restoredActiveMainTab);
+      setTaxCreditChoice(restoredTaxCreditChoice);
+      setShowClawback(restoredShowClawback);
+      setManuallyExcludedIds(restoredManualIds);
       
-      const uniqueYears = [...new Set(allEmployees.map(d => d.year))].sort((a,b) => b - a);
+      const uniqueYears = [...new Set(restoredData.map(d => d.year))].sort((a,b) => b - a);
       if (uniqueYears.length > 0) setActiveYearTab(uniqueYears[0].toString()); // Still track active year for non-lifted contexts if needed, but mainly for default
       
-      if(allEmployees.length > 0) {
-          performCalculation(allEmployees, settings);
+      if (restoredData.length > 0) {
+          performCalculation(restoredData, restoredSettings);
       }
 
     } else {
       setProcessedData([]);
     }
-  }, [initialData]); 
+  }, [initialData, initialSessionState]); 
 
   useEffect(() => {
+     if (isRestoringRef.current) {
+         isRestoringRef.current = false;
+         return;
+     }
      if(processedData.length > 0) {
          setIsCalculated(false); 
          setShowClawback(false);
      }
   }, [settings]);
+
+  useEffect(() => {
+      if (!onStateChange || processedData.length === 0) return;
+
+      onStateChange({
+          processedData,
+          settings,
+          taxCreditChoice,
+          showClawback,
+          manuallyExcludedIds: Array.from(manuallyExcludedIds),
+          activeMainTab,
+          activeYearTab,
+          isCalculated,
+      });
+  }, [
+      activeMainTab,
+      activeYearTab,
+      isCalculated,
+      manuallyExcludedIds,
+      onStateChange,
+      processedData,
+      settings,
+      showClawback,
+      taxCreditChoice,
+  ]);
 
   const performCalculation = (data, currentSettings) => {
       const validEmployees = data.filter(d => !d.exclusionReason);
@@ -977,6 +1022,7 @@ export default function EmploymentIncreaseCalculator({ initialData }) {
                       </h3>
                       <div className="w-full max-w-[240px] relative">
                           <input
+                              name="exclude-employee-search"
                               type="text"
                               className="input input-sm input-bordered w-full"
                               placeholder="+ 사원 검색하여 추가"
