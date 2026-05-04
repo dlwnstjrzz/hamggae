@@ -6,7 +6,7 @@ import { calculateEmploymentIncreaseCredit } from '../utils/taxCorrection/employ
 import { calculateSocialInsuranceClaims } from '../utils/taxCorrection/socialInsurance';
 import { calculateIncomeIncreaseCredit } from '../utils/taxCorrection/incomeIncrease';
 import { aggregateTaxCreditSummary } from '../utils/taxCorrection/summaryHelpers';
-import { generateTaxCreditExcel, downloadShortTermResignersExcel } from '../utils/excelGenerator';
+import { generateTaxCreditExcel, downloadShortTermResignersExcel, downloadEmploymentIncreaseList, downloadIntegratedEmploymentList, downloadSocialInsuranceList, downloadIncomeIncreaseList } from '../utils/excelGenerator';
 
 import { RiseOutlined, TeamOutlined, CalculatorOutlined, FileTextOutlined, SafetyCertificateOutlined, DollarOutlined, ExclamationCircleOutlined, DownloadOutlined, ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 
@@ -252,7 +252,7 @@ const IncomeCohortCard = ({ record, formatNumber }) => {
                                                     <th>이름</th>
                                                     <th>입사일 / 퇴사일</th>
                                                     <th className="text-right">총급여</th>
-                                                    <th className="text-right">근속월수(청년/일반)</th>
+                                                    <th className="text-right">근속월수</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -268,7 +268,7 @@ const IncomeCohortCard = ({ record, formatNumber }) => {
                                                                 {formatNumber(emp.totalSalary)}
                                                             </td>
                                                             <td className="text-right font-mono text-sm">
-                                                                {emp.youthMonths}/{emp.normalMonths}
+                                                                {(emp.youthMonths || 0) + (emp.normalMonths || 0)}
                                                             </td>
                                                         </tr>
                                                     ))
@@ -296,7 +296,7 @@ const IncomeCohortCard = ({ record, formatNumber }) => {
                                                     <th>이름</th>
                                                     <th>입사일 / 퇴사일</th>
                                                     <th className="text-right">총급여</th>
-                                                    <th className="text-right">근속(청년/일반)</th>
+                                                    <th className="text-right">근속월수</th>
                                                     <th>제외 사유</th>
                                                 </tr>
                                             </thead>
@@ -313,7 +313,7 @@ const IncomeCohortCard = ({ record, formatNumber }) => {
                                                                 {formatNumber(ex.totalSalary)}
                                                             </td>
                                                             <td className="text-right font-mono text-sm">
-                                                                {ex.youthMonths}/{ex.normalMonths}
+                                                                {(ex.youthMonths || 0) + (ex.normalMonths || 0)}
                                                             </td>
                                                             <td className="text-error text-xs break-keep leading-tight font-bold">
                                                                 {ex.reason === '연말 기준 미재직' ? '5년 내 퇴사이력' : ex.reason}
@@ -1118,6 +1118,11 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
         ? [...summaryData].sort((a, b) => b.year - a.year).slice(0, 5).sort((a, b) => a.year - b.year)
         : [];
   const summaryYears = recentSummaryData.map(d => d.year);
+
+  const minDataYear = processedData.length > 0 ? Math.min(...processedData.map(d => d.year)) : null;
+  const incomeResultsList = incomeIncreaseResults?.results?.filter(
+      r => minDataYear === null || r.year >= minDataYear + 4
+  ) ?? [];
   
   const getSummaryRows = () => {
        if (!recentSummaryData.length) return [];
@@ -1788,11 +1793,20 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
                      
                      {/* Regular Employee List */}
                      <div className="mt-8">
-                         <h3 className="font-bold text-md mb-4 px-2">연도별 상시근로자 리스트</h3>
+                         <div className="flex items-center justify-between mb-4 px-2">
+                             <h3 className="font-bold text-md">연도별 상시근로자 리스트</h3>
+                             <button
+                                 className="btn btn-sm btn-outline gap-2"
+                                 onClick={() => downloadIntegratedEmploymentList(processedData)}
+                             >
+                                 <DownloadOutlined />
+                                 통합고용 상시근로자 리스트 다운로드
+                             </button>
+                         </div>
                           <YearTabs data={processedData.filter(d => d.year >= 2022)}>
                              {(year, yearData) => (
-                                 <EmployeeListTable 
-                                     yearData={yearData} 
+                                 <EmployeeListTable
+                                     yearData={yearData}
                                      onUpdateExclusion={updateExclusion}
                                      formatNumber={formatNumber}
                                      isIntegrated={true}
@@ -1979,11 +1993,20 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
                      
                      {/* Regular Employee List */}
                      <div className="mt-8">
-                         <h3 className="font-bold text-md mb-4 px-2">연도별 상시근로자 리스트</h3>
+                         <div className="flex items-center justify-between mb-4 px-2">
+                             <h3 className="font-bold text-md">연도별 상시근로자 리스트</h3>
+                             <button
+                                 className="btn btn-sm btn-outline gap-2"
+                                 onClick={() => downloadEmploymentIncreaseList(processedData)}
+                             >
+                                 <DownloadOutlined />
+                                 고용증대 상시근로자 리스트 다운로드
+                             </button>
+                         </div>
                           <YearTabs data={processedData}>
                              {(year, yearData) => (
-                                 <EmployeeListTable 
-                                     yearData={yearData} 
+                                 <EmployeeListTable
+                                     yearData={yearData}
                                      onUpdateExclusion={updateExclusion}
                                      formatNumber={formatNumber}
                                  />
@@ -2200,11 +2223,20 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
                      
                      
                      <div className="mt-8">
-                         <h3 className="font-bold text-md mb-4 px-2">연도별 상시근로자 리스트</h3>
+                         <div className="flex items-center justify-between mb-4 px-2">
+                             <h3 className="font-bold text-md">연도별 상시근로자 리스트</h3>
+                             <button
+                                 className="btn btn-sm btn-outline gap-2"
+                                 onClick={() => downloadSocialInsuranceList(processedData)}
+                             >
+                                 <DownloadOutlined />
+                                 사회보험 상시근로자 리스트 다운로드
+                             </button>
+                         </div>
                          <YearTabs data={processedData}>
                              {(year, yearData) => (
-                                 <EmployeeListTable 
-                                     yearData={yearData} 
+                                 <EmployeeListTable
+                                     yearData={yearData}
                                      onUpdateExclusion={updateExclusion}
                                      formatNumber={formatNumber}
                                  />
@@ -2221,16 +2253,25 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
                      {/* Income Increase Comprehensive Summary */}
                      <div className="card shadow-sm bg-base-100 border border-base-200">
                          <div className="card-body p-6">
-                             <h3 className="card-title text-lg mb-4 flex items-center gap-2">
-                                <span>�</span> 근로소득증대 세액공제 종합 요약 (최근 5년)
-                             </h3>
+                             <div className="flex items-center justify-between mb-4">
+                                 <h3 className="card-title text-lg flex items-center gap-2">
+                                     <span>💰</span> 근로소득증대 세액공제 종합 요약 (최근 5년)
+                                 </h3>
+                                 <button
+                                     className="btn btn-sm btn-outline gap-2"
+                                     onClick={() => downloadIncomeIncreaseList({ ...incomeIncreaseResults, results: incomeResultsList })}
+                                 >
+                                     <DownloadOutlined />
+                                     귀속분별 상시근로자 리스트 다운로드
+                                 </button>
+                             </div>
                              <div className="overflow-x-auto">
-                                 {incomeIncreaseResults.results.length > 0 ? (
+                                 {incomeResultsList.length > 0 ? (
                                      <table className="table table-sm text-center w-full border border-base-200">
                                          <thead className="bg-base-200/50">
                                              <tr>
                                                  <th className="min-w-[120px] text-left pl-4 text-sm">구분</th>
-                                                 {incomeIncreaseResults.results.sort((a,b) => b.year - a.year).slice(0, 5).sort((a,b) => a.year - b.year).map(res => (
+                                                 {incomeResultsList.sort((a,b) => b.year - a.year).slice(0, 5).sort((a,b) => a.year - b.year).map(res => (
                                                      <th key={res.year} className="text-sm">{res.year}년</th>
                                                  ))}
                                              </tr>
@@ -2239,7 +2280,7 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
                                              {/* Method Row */}
                                              <tr>
                                                  <td className="font-bold text-left pl-4 text-sm opacity-70">실제 적용 방식</td>
-                                                 {incomeIncreaseResults.results.sort((a,b) => b.year - a.year).slice(0, 5).sort((a,b) => a.year - b.year).map(res => {
+                                                 {incomeResultsList.sort((a,b) => b.year - a.year).slice(0, 5).sort((a,b) => a.year - b.year).map(res => {
                                                      let methodLabel = '일반계산';
                                                      let badgeClass = 'badge-ghost';
                                                      if (res.calculationMethod === 'sme') { methodLabel = '중소기업 특례'; badgeClass = 'badge-primary'; }
@@ -2256,7 +2297,7 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
                                              {/* Rate Row */}
                                              <tr>
                                                  <td className="font-bold text-left pl-4 text-sm opacity-70">임금 증가율</td>
-                                                 {incomeIncreaseResults.results.sort((a,b) => b.year - a.year).slice(0, 5).sort((a,b) => a.year - b.year).map(res => (
+                                                 {incomeResultsList.sort((a,b) => b.year - a.year).slice(0, 5).sort((a,b) => a.year - b.year).map(res => (
                                                      <td key={res.year} className="font-mono text-sm">
                                                          {res.rateT !== undefined && res.rateT !== null ? (
                                                              <span className={res.rateT > 0 ? 'text-success font-bold' : (res.rateT < 0 ? 'text-error font-bold' : 'text-base-content/50')}>
@@ -2269,7 +2310,7 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
                                              {/* Excess Amount Row */}
                                              <tr>
                                                  <td className="font-bold text-left pl-4 text-sm opacity-70">공제 대상 초과액</td>
-                                                 {incomeIncreaseResults.results.sort((a,b) => b.year - a.year).slice(0, 5).sort((a,b) => a.year - b.year).map(res => (
+                                                 {incomeResultsList.sort((a,b) => b.year - a.year).slice(0, 5).sort((a,b) => a.year - b.year).map(res => (
                                                      <td key={res.year} className="font-mono text-sm opacity-80">
                                                          {formatNumber(res.excessAmount)}
                                                      </td>
@@ -2278,7 +2319,7 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
                                              {/* Final Credit Row */}
                                              <tr className="bg-primary/5 font-bold">
                                                  <td className="text-left pl-4 text-primary text-sm">최종 세액공제액</td>
-                                                 {incomeIncreaseResults.results.sort((a,b) => b.year - a.year).slice(0, 5).sort((a,b) => a.year - b.year).map(res => (
+                                                 {incomeResultsList.sort((a,b) => b.year - a.year).slice(0, 5).sort((a,b) => a.year - b.year).map(res => (
                                                      <td key={res.year} className="font-mono text-primary text-sm">
                                                          {formatNumber(res.taxCredit)}
                                                      </td>
@@ -2294,7 +2335,7 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
                      </div>
 
                     
-                     {incomeIncreaseResults.results.length === 0 && (
+                     {incomeResultsList.length === 0 && (
                         <div className="text-center py-20 opacity-50 border border-dashed border-base-300 rounded-box">
                             <div className="text-4xl mb-4">📉</div>
                             <p>근로소득증대 공제 발생 내역이 없습니다.</p>
@@ -2302,7 +2343,7 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
                     )}
 
 {/* Sub-component for individual Cohort Card to manage local state (Year Tabs) */}
-                    {incomeIncreaseResults.results.sort((a,b) => b.year - a.year).map((record, idx) => (
+                    {incomeResultsList.sort((a,b) => b.year - a.year).map((record, idx) => (
                          <IncomeCohortCard key={record.year} record={record} formatNumber={formatNumber} />
                     ))}
                 </div>

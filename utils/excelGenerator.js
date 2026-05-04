@@ -220,3 +220,164 @@ export async function downloadShortTermResignersExcel(processedData) {
     anchor.click();
     window.URL.revokeObjectURL(url);
 }
+
+function createEmployeeListSheet(workbook, sheetName, employees, useIntegrated = false) {
+    const sheet = workbook.addWorksheet(sheetName);
+    sheet.columns = [
+        { header: '성명', key: 'name', width: 12 },
+        { header: '주민등록번호', key: 'id', width: 18 },
+        { header: '입사일', key: 'hireDate', width: 12 },
+        { header: '퇴사일', key: 'retireDate', width: 12 },
+        { header: '총급여', key: 'totalSalary', width: 15, style: { numFmt: '#,##0' } },
+        { header: '청년여부', key: 'isYouth', width: 10 },
+        { header: '청년근속(월)', key: 'youthMonths', width: 12, style: { numFmt: '0' } },
+        { header: '일반근속(월)', key: 'normalMonths', width: 12, style: { numFmt: '0' } },
+        { header: '제외사유', key: 'exclusionReason', width: 25 },
+    ];
+    sheet.getRow(1).font = { bold: true };
+    sheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+    employees.forEach(emp => {
+        sheet.addRow({
+            name: emp.name,
+            id: emp.id,
+            hireDate: emp.hireDate,
+            retireDate: emp.retireDate || '',
+            totalSalary: emp.totalSalary,
+            isYouth: emp.isYouth ? '청년' : '청년외',
+            youthMonths: useIntegrated ? (emp.integratedYouthMonths ?? 0) : (emp.youthMonths ?? 0),
+            normalMonths: useIntegrated ? (emp.integratedNormalMonths ?? 0) : (emp.normalMonths ?? 0),
+            exclusionReason: emp.exclusionReason || '',
+        });
+    });
+}
+
+function sortEmployeeList(employees) {
+    return [...employees].sort((a, b) => {
+        if (a.exclusionReason && !b.exclusionReason) return 1;
+        if (!a.exclusionReason && b.exclusionReason) return -1;
+        return (b.totalSalary || 0) - (a.totalSalary || 0);
+    });
+}
+
+async function downloadWorkbook(workbook, fileName) {
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    anchor.click();
+    window.URL.revokeObjectURL(url);
+}
+
+export async function downloadEmploymentIncreaseList(processedData) {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Mega-Info Consulting';
+    workbook.created = new Date();
+
+    const dataByYear = {};
+    processedData.forEach(d => {
+        if (!dataByYear[d.year]) dataByYear[d.year] = [];
+        dataByYear[d.year].push(d);
+    });
+
+    Object.keys(dataByYear).sort((a, b) => b - a).forEach(year => {
+        createEmployeeListSheet(workbook, `${year}년`, sortEmployeeList(dataByYear[year]), false);
+    });
+
+    await downloadWorkbook(workbook, `고용증대_상시근로자_리스트_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+export async function downloadIntegratedEmploymentList(processedData) {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Mega-Info Consulting';
+    workbook.created = new Date();
+
+    const dataByYear = {};
+    processedData.filter(d => d.year >= 2022).forEach(d => {
+        if (!dataByYear[d.year]) dataByYear[d.year] = [];
+        dataByYear[d.year].push(d);
+    });
+
+    Object.keys(dataByYear).sort((a, b) => b - a).forEach(year => {
+        createEmployeeListSheet(workbook, `${year}년`, sortEmployeeList(dataByYear[year]), true);
+    });
+
+    await downloadWorkbook(workbook, `통합고용_상시근로자_리스트_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+export async function downloadSocialInsuranceList(processedData) {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Mega-Info Consulting';
+    workbook.created = new Date();
+
+    const dataByYear = {};
+    processedData.forEach(d => {
+        if (!dataByYear[d.year]) dataByYear[d.year] = [];
+        dataByYear[d.year].push(d);
+    });
+
+    Object.keys(dataByYear).sort((a, b) => b - a).forEach(year => {
+        createEmployeeListSheet(workbook, `${year}년`, sortEmployeeList(dataByYear[year]), false);
+    });
+
+    await downloadWorkbook(workbook, `사회보험_상시근로자_리스트_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+export async function downloadIncomeIncreaseList(incomeIncreaseResults) {
+    if (!incomeIncreaseResults?.results?.length) return;
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Mega-Info Consulting';
+    workbook.created = new Date();
+
+    const includedColumns = [
+        { header: '성명', key: 'name', width: 12 },
+        { header: '입사일', key: 'hireDate', width: 12 },
+        { header: '퇴사일', key: 'retireDate', width: 12 },
+        { header: '총급여', key: 'totalSalary', width: 15, style: { numFmt: '#,##0' } },
+        { header: '근속월수', key: 'totalMonths', width: 12, style: { numFmt: '0' } },
+    ];
+    const excludedColumns = [
+        ...includedColumns,
+        { header: '제외사유', key: 'reason', width: 25 },
+    ];
+
+    [...incomeIncreaseResults.results].sort((a, b) => a.year - b.year).forEach(record => {
+        const targetYear = record.year;
+
+        const includedEmps = record.history?.[targetYear]?.includedEmployees || record.includedEmployees || [];
+        const includedSheet = workbook.addWorksheet(`${targetYear}년 귀속분 포함대상`);
+        includedSheet.columns = includedColumns;
+        includedSheet.getRow(1).font = { bold: true };
+        includedSheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+        [...includedEmps].sort((a, b) => (b.totalSalary || 0) - (a.totalSalary || 0)).forEach(emp => {
+            includedSheet.addRow({
+                name: emp.name,
+                hireDate: emp.hireDate,
+                retireDate: emp.retireDate || '',
+                totalSalary: emp.totalSalary || 0,
+                totalMonths: (emp.youthMonths || 0) + (emp.normalMonths || 0),
+            });
+        });
+
+        const excludedEmps = record.history?.[targetYear]?.excludedEmployees || record.excludedEmployees || [];
+        const excludedSheet = workbook.addWorksheet(`${targetYear}년 귀속분 미포함대상`);
+        excludedSheet.columns = excludedColumns;
+        excludedSheet.getRow(1).font = { bold: true };
+        excludedSheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+        [...excludedEmps].sort((a, b) => (b.totalSalary || 0) - (a.totalSalary || 0)).forEach(emp => {
+            excludedSheet.addRow({
+                name: emp.name,
+                hireDate: emp.hireDate,
+                retireDate: emp.retireDate || '',
+                totalSalary: emp.totalSalary || 0,
+                totalMonths: (emp.youthMonths || 0) + (emp.normalMonths || 0),
+                reason: emp.reason || '',
+            });
+        });
+    });
+
+    await downloadWorkbook(workbook, `근로소득증대_상시근로자_리스트_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
