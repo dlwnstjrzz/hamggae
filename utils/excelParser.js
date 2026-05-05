@@ -182,9 +182,9 @@ export async function parseExcel(file) {
           if (str.includes('*')) return str; // Already masked
           
           if (str.includes('-')) {
-              return str.substring(0, 8) + '******'; // YYMMDD-G******
+              return `${str.split('-')[0]}-*******`; // YYMMDD-*******
           } else if (str.length >= 7) {
-              return str.substring(0, 7) + '******'; // YYMMDDG******
+              return `${str.substring(0, 6)}*******`; // YYMMDD*******
           }
           return str; // Fallback
       };
