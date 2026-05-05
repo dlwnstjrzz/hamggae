@@ -36,6 +36,7 @@ export async function parseExcel(file) {
                     endDate: endDate ? String(endDate) : null,
                     history: []
                 });
+                console.log(`[DEBUG-EXEC-PARSE] row=${rowNumber} ${row.getCell(1).value || ''} ${String(name)} (${String(row.getCell(3).value || '')}) startDate=${startDate ? String(startDate) : null} endDate=${endDate ? String(endDate) : null}`);
             });
             results.push({
                 type: 'registry',

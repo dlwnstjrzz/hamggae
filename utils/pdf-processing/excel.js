@@ -548,6 +548,7 @@ export async function generateExcel(results) {
     const mergedExecutives = new Map();
     registryResults.forEach(reg => {
       reg.executives.forEach(exec => {
+        console.log(`[DEBUG-EXEC-EXCEL-SOURCE] ${exec.position} ${exec.name} (${exec.id}) startDate=${exec.startDate} endDate=${exec.endDate} history=${JSON.stringify(exec.history)}`);
         const juminFront = exec.id.split('-')[0];
         const key = `${exec.name}_${juminFront}`;
         if (!mergedExecutives.has(key)) {
@@ -573,15 +574,17 @@ export async function generateExcel(results) {
             }
         });
         
-        // Start/End 재계산
-        let startDate = null;
-        let endDate = null;
+        // Start/End 재계산. history가 비어 있으면 이미 파싱된 값을 유지한다.
+        let startDate = exec.startDate || null;
+        let endDate = exec.endDate || null;
         if (uniqueHistory.length > 0) {
             startDate = uniqueHistory[0].date;
             const lastEvent = uniqueHistory[uniqueHistory.length - 1];
-            if (['사임', '퇴임', '만료', '해임'].includes(lastEvent.type)) endDate = lastEvent.date;
+            endDate = ['사임', '퇴임', '만료', '해임'].includes(lastEvent.type) ? lastEvent.date : null;
         }
-        return { ...exec, history: uniqueHistory, startDate, endDate };
+        const normalizedExec = { ...exec, history: uniqueHistory, startDate, endDate };
+        console.log(`[DEBUG-EXEC-EXCEL-NORMALIZED] ${normalizedExec.position} ${normalizedExec.name} (${normalizedExec.id}) startDate=${normalizedExec.startDate} endDate=${normalizedExec.endDate} history=${JSON.stringify(normalizedExec.history)}`);
+        return normalizedExec;
     });
 
     // 출력
@@ -593,7 +596,10 @@ export async function generateExcel(results) {
         const targetStart = new Date(`${minYear}-01-01`);
         const targetEnd = new Date(`${maxYear}-12-31`);
 
-        if (execEnd < targetStart || execStart > targetEnd) return;
+        if (execEnd < targetStart || execStart > targetEnd) {
+            console.log(`[DEBUG-EXEC-EXCEL-SKIP] ${exec.position} ${exec.name} (${exec.id}) startDate=${exec.startDate} endDate=${exec.endDate} target=${minYear}-${maxYear}`);
+            return;
+        }
 
         const row = wsExec.getRow(rowIdx);
         row.values = [
@@ -604,6 +610,7 @@ export async function generateExcel(results) {
             exec.endDate || '재직 중',
             `${exec.startDate} ~ ${exec.endDate || '현재'}`
         ];
+        console.log(`[DEBUG-EXEC-EXCEL-ROW] row=${rowIdx} ${exec.position} ${exec.name} (${exec.id}) startDate=${exec.startDate} endDate=${exec.endDate || '재직 중'}`);
         row.eachCell(cell => {
             cell.border = borderStyle;
             cell.alignment = { vertical: 'middle', horizontal: 'center' };

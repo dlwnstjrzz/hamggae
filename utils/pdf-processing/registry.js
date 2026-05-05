@@ -51,6 +51,26 @@ export async function processRegistryPDF(pdf, filename) {
   let parsingAddress = false;
   let currentExec = null;
 
+  const isSameExecutive = (exec, position, name, id) => {
+    if (!exec) return false;
+    return exec.position === position && exec.id === id;
+  };
+
+  const extractHistoryEvents = (text) => {
+    const events = [];
+    const dateRegex = /(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일\s*(취임|중임|사임|퇴임|만료|해임)/g;
+    let match;
+
+    while ((match = dateRegex.exec(text)) !== null) {
+      events.push({
+        date: `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`,
+        type: match[4]
+      });
+    }
+
+    return events;
+  };
+
   for (let i = 0; i < allLines.length; i++) {
     const line = allLines[i];
     
@@ -150,25 +170,40 @@ export async function processRegistryPDF(pdf, filename) {
       const execMatch = line.match(/(사내이사|사외이사|감사|대표이사|공동대표이사|이사|기타비상무이사|감사위원)\s*([^0-9]+?)\s+(\d{6}-[\d*]{7})/);
       
       if (execMatch) {
+        if (currentExec) {
+          currentExec.history.push(...extractHistoryEvents(line.slice(0, execMatch.index)));
+          console.log(`[DEBUG-REGISTRY-BEFORE-PUSH] ${currentExec.position} ${currentExec.name} (${currentExec.id}) history=${JSON.stringify(currentExec.history)}`);
+        }
+
+        const position = execMatch[1].trim();
+        const name = execMatch[2].trim();
+        const id = execMatch[3].trim();
+        const afterExecText = line.slice(execMatch.index + execMatch[0].length);
+
+        // 같은 임원이 주소변경/개명 등으로 연속 반복 표기되는 경우가 있어 새 엔트리로 끊지 않는다.
+        if (isSameExecutive(currentExec, position, name, id)) {
+          currentExec.name = name;
+          currentExec.history.push(...extractHistoryEvents(afterExecText));
+          continue;
+        }
+
         // 새로운 임원 발견 -> 이전 임원 저장
         if (currentExec) {
           result.executives.push(currentExec);
         }
         currentExec = {
-          position: execMatch[1],
-          name: execMatch[2],
-          id: execMatch[3],
+          position,
+          name,
+          id,
           history: []
         };
+        currentExec.history.push(...extractHistoryEvents(afterExecText));
+        console.log(`[DEBUG-REGISTRY-NEW-EXEC] line="${line}" -> ${position} ${name} (${id}) afterHistory=${JSON.stringify(currentExec.history)}`);
       } else if (currentExec) {
-        // 날짜 및 이벤트 파싱
-        // 2014 년 06 월 26 일 취임
-        const dateMatch = line.match(/(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일\s*(취임|중임|사임|퇴임|만료|해임)/);
-        if (dateMatch) {
-          currentExec.history.push({
-            date: `${dateMatch[1]}-${dateMatch[2].padStart(2,'0')}-${dateMatch[3].padStart(2,'0')}`,
-            type: dateMatch[4]
-          });
+        const events = extractHistoryEvents(line);
+        if (events.length > 0) {
+          currentExec.history.push(...events);
+          console.log(`[DEBUG-REGISTRY-LINE-EVENTS] ${currentExec.position} ${currentExec.name} (${currentExec.id}) line="${line}" events=${JSON.stringify(events)}`);
         }
       }
     }
@@ -176,6 +211,7 @@ export async function processRegistryPDF(pdf, filename) {
   
   // 마지막 임원 저장
   if (currentExec) {
+    console.log(`[DEBUG-REGISTRY-FINAL-PUSH] ${currentExec.position} ${currentExec.name} (${currentExec.id}) history=${JSON.stringify(currentExec.history)}`);
     result.executives.push(currentExec);
   }
 
@@ -198,11 +234,13 @@ export async function processRegistryPDF(pdf, filename) {
       }
     }
 
-    return {
+    const normalizedExec = {
       ...exec,
       startDate,
       endDate
     };
+    console.log(`[DEBUG-REGISTRY-NORMALIZED] ${normalizedExec.position} ${normalizedExec.name} (${normalizedExec.id}) startDate=${normalizedExec.startDate} endDate=${normalizedExec.endDate} history=${JSON.stringify(normalizedExec.history)}`);
+    return normalizedExec;
   });
 
   console.log(`-> 임원 ${result.executives.length}명 추출 완료`);
