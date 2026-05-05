@@ -493,6 +493,7 @@ const EmployeeListTable = ({ yearData, onUpdateExclusion, formatNumber, isIntegr
                                 <option value="force_include" className="text-success font-bold">포함</option>
                                 <option value={emp.executivePeriods && emp.executivePeriods.length > 0 ? 'partial_exec' : '임원'} className="text-error font-bold">임원</option>
                                 <option value="최대주주및가족" className="text-error font-bold">최대주주 및 친족</option>
+                                <option value="대표자가족" className="text-error font-bold">대표자 가족</option>
                                 <option value="기타" className="text-base-content font-bold">계약직/기타</option>
                             </select>
                         </td>
@@ -1114,6 +1115,7 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
                                                           <option value="force_include" className="text-base-content font-bold">- 제외 안함 -</option>
                                                           <option value={yearData && yearData.executivePeriods && yearData.executivePeriods.length > 0 ? 'partial_exec' : '임원'} className="text-error font-bold">임원</option>
                                                           <option value="최대주주및가족" className="text-error font-bold">최대주주/친족</option>
+                                                          <option value="대표자가족" className="text-error font-bold">대표자 가족</option>
                                                           <option value="기타" className="text-base-content font-bold">계약직/기타</option>
                                                       </select>
                                                       <div className={`font-mono ${isExcluded || hasExec ? 'line-through text-base-content/40' : ''}`}>
