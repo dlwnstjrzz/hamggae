@@ -1142,6 +1142,25 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
         : [];
   const summaryYears = recentSummaryData.map(d => d.year);
 
+  const getEmploymentCarryoverForIntegratedSummary = (year) => {
+       const res = creditResults?.employmentIncreaseResults?.find(r => r.year === year);
+       if (!res || year < 2023) return 0;
+
+       let carryover = 0;
+       if (year - 1 < 2023) carryover += res.credit2nd || 0;
+       if (year - 2 < 2023) carryover += res.credit3rd || 0;
+       return carryover;
+  };
+
+  const getSocialCarryoverForIntegratedSummary = (year) => {
+       const res = socialInsuranceResults?.results?.find(r => r.year === year);
+       if (!res || year < 2023) return 0;
+
+       let carryover = 0;
+       if (year - 1 < 2023) carryover += res.credit2nd || 0;
+       return carryover;
+  };
+
   const minDataYear = processedData.length > 0 ? Math.min(...processedData.map(d => d.year)) : null;
   const incomeResultsList = incomeIncreaseResults?.results?.filter(
       r => minDataYear === null || r.year >= minDataYear + 4
@@ -1162,8 +1181,8 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
                if (d.year >= 2023) {
                    if (taxCreditChoice === 'integrated') {
                        if (row.key === 'int') val = d.integratedEmployment || 0;
-                       if (row.key === 'emp') val = 0;
-                       if (row.key === 'soc') val = 0;
+                       if (row.key === 'emp') val = getEmploymentCarryoverForIntegratedSummary(d.year);
+                       if (row.key === 'soc') val = getSocialCarryoverForIntegratedSummary(d.year);
                    } else {
                        if (row.key === 'int') val = 0;
                        if (row.key === 'emp') val = d.employmentIncrease || 0;
