@@ -88,7 +88,15 @@ export async function parseExcel(file) {
           if (header === '성명') emp['성명'] = cellValue;
           else if (header === '주민등록번호') emp['주민등록번호'] = cellValue;
           else if (header === '입사일') emp['입사일'] = cell.value; // Keep raw for date check
-          else if (header === '퇴사일') emp['퇴사일'] = cell.value; 
+          else if (header === '퇴사일') emp['퇴사일'] = cell.value;
+          else if (header === '퇴사간주사유') {
+              // PDF 경로: excel.js가 별도 컬럼에 사유를 씀 → 값이 있으면 퇴사간주
+              if (cellValue && String(cellValue).trim()) {
+                  emp['_inferredRetire'] = true;
+                  emp['_inferredRetireReason'] = String(cellValue).trim();
+                  console.log(`[DEBUG-PARSE] ${emp['성명'] || '?'}: 퇴사간주사유 읽음 = "${emp['_inferredRetireReason']}"`);
+              }
+          }
           else if (header === '총급여액') emp['총급여액'] = typeof cellValue === 'number' ? cellValue : parseFloat(cellValue || 0);
           else if (header === '급여계') emp['급여계'] = typeof cellValue === 'number' ? cellValue : parseFloat(cellValue || 0);
           else if (header === '상여계') emp['상여계'] = typeof cellValue === 'number' ? cellValue : parseFloat(cellValue || 0);
@@ -193,6 +201,85 @@ export async function parseExcel(file) {
           }
       }
   }
+
+  // --- 퇴사간주 추론 로직 (PDF 경로의 generateExcel과 동일) ---
+  const withholdingByYear = {};
+  results.filter(r => r.type === 'withholding').forEach(r => {
+      if (r.year) withholdingByYear[r.year] = r.employees;
+  });
+
+  const numericYears = Object.keys(withholdingByYear).map(Number).sort((a, b) => a - b);
+
+  const getEmpKey = (emp) => {
+      const jumin = String(emp['주민등록번호'] || '');
+      const front = jumin.split('-')[0] || jumin.substring(0, 6);
+      return `${emp['성명']}_${front}`;
+  };
+
+  const getLastDay = (year, month) => {
+      const d = new Date(parseInt(year), parseInt(month), 0); // local time last day of month
+      const y = d.getFullYear();
+      const mo = String(d.getMonth() + 1).padStart(2, '0');
+      const dy = String(d.getDate()).padStart(2, '0');
+      return `${y}-${mo}-${dy}`;
+  };
+
+  const getSal = (emp, m) =>
+      (emp.monthly_salary?.[m] || emp.monthly_salary?.[String(m)] || 0)
+      + (emp.monthly_bonus?.[m] || emp.monthly_bonus?.[String(m)] || 0);
+
+  const maxYear = numericYears.length > 0 ? numericYears[numericYears.length - 1] : null;
+
+  const empKeysByYear = {};
+  numericYears.forEach(y => {
+      empKeysByYear[y] = new Set((withholdingByYear[String(y)] || []).map(getEmpKey));
+  });
+
+  numericYears.forEach(year => {
+      (withholdingByYear[String(year)] || []).forEach(emp => {
+          // 퇴사일이 이미 있으면 스킵 (실제 퇴사일 있거나 PDF 경로에서 orange cell로 이미 처리됨)
+          if (emp['퇴사일']) return;
+
+          let lastNonZeroMonth = null;
+          for (let m = 12; m >= 1; m--) {
+              if (getSal(emp, m) > 0) { lastNonZeroMonth = m; break; }
+          }
+          if (!lastNonZeroMonth) return;
+
+          let inferredDate = null;
+          let inferredReason = null;
+
+          // Case 1: 마지막 급여월 이후 연속으로 전부 0 (최신 연도 포함 적용)
+          if (lastNonZeroMonth < 12) {
+              let allZeroAfter = true;
+              for (let m = lastNonZeroMonth + 1; m <= 12; m++) {
+                  if (getSal(emp, m) > 0) { allZeroAfter = false; break; }
+              }
+              if (allZeroAfter) {
+                  inferredDate = getLastDay(year, lastNonZeroMonth);
+                  inferredReason = '연중 급여 중단';
+              }
+          }
+
+          // Case 2: 12월까지 급여 있으나 이후 연도에 자료 없음
+          // → 최신 연도는 미적용 (다음 연도 자료를 아직 안 넣은 것이므로 재직 중으로 판단)
+          if (!inferredDate && lastNonZeroMonth === 12 && year !== maxYear) {
+              const empKey = getEmpKey(emp);
+              const appearsLater = numericYears.some(y => y > year && empKeysByYear[y]?.has(empKey));
+              if (!appearsLater) {
+                  inferredDate = getLastDay(year, 12);
+                  inferredReason = '다음연도 자료 없음';
+              }
+          }
+
+          if (!inferredDate) return;
+
+          // 퇴사일 없는 경우에만 여기 도달 (직접 Excel 업로드 경로)
+          emp['퇴사일'] = inferredDate;
+          emp['_inferredRetire'] = true;
+          emp['_inferredRetireReason'] = inferredReason;
+      });
+  });
 
   console.log('[DEBUG] Final Results:', results);
   return results;

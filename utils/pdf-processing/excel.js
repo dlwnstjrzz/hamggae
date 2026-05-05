@@ -1,5 +1,19 @@
 import ExcelJS from 'exceljs';
 
+function getLastDayOfMonth(year, month) {
+    const d = new Date(parseInt(year), parseInt(month), 0); // local last day of month
+    const y = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const dy = String(d.getDate()).padStart(2, '0');
+    return `${y}-${mo}-${dy}`;
+}
+
+function getEmpKey(emp) {
+    const jumin = emp.주민등록번호 || '';
+    const front = jumin.split('-')[0] || jumin.substring(0, 6);
+    return `${emp.성명}_${front}`;
+}
+
 export async function generateExcel(results) {
   console.log('[generateExcel] 엑셀 생성 시작');
   const workbook = new ExcelJS.Workbook();
@@ -170,6 +184,80 @@ export async function generateExcel(results) {
     }
   }
 
+  // --- 퇴사간주 추론 로직 ---
+  const numericYears = Object.keys(dataByYear)
+      .filter(y => y !== 'Unknown')
+      .map(Number)
+      .sort((a, b) => a - b);
+
+  const maxYear = numericYears.length > 0 ? numericYears[numericYears.length - 1] : null;
+
+  const empKeysByYear = {};
+  numericYears.forEach(y => {
+      empKeysByYear[y] = new Set(dataByYear[String(y)].map(getEmpKey));
+  });
+
+  const inferredRetireList = [];
+
+  numericYears.forEach(year => {
+      const yearStr = String(year);
+      dataByYear[yearStr].forEach(emp => {
+          if (emp.퇴사일) return;
+
+          let lastNonZeroMonth = null;
+          for (let m = 12; m >= 1; m--) {
+              if ((emp.monthly_salary?.[m] || 0) + (emp.monthly_bonus?.[m] || 0) > 0) {
+                  lastNonZeroMonth = m;
+                  break;
+              }
+          }
+          if (!lastNonZeroMonth) return;
+
+          let inferredDate = null;
+          let reason = null;
+
+          // Case 1: 마지막 급여월 이후 연속으로 전부 0 (연중 퇴사 간주, 최신 연도 포함 적용)
+          if (lastNonZeroMonth < 12) {
+              let allZeroAfter = true;
+              for (let m = lastNonZeroMonth + 1; m <= 12; m++) {
+                  if ((emp.monthly_salary?.[m] || 0) + (emp.monthly_bonus?.[m] || 0) > 0) {
+                      allZeroAfter = false;
+                      break;
+                  }
+              }
+              if (allZeroAfter) {
+                  inferredDate = getLastDayOfMonth(year, lastNonZeroMonth);
+                  reason = '연중 급여 중단';
+              }
+          }
+
+          // Case 2: 12월까지 급여 있으나 이후 연도에 해당 인원 자료 없음
+          // → 최신 연도는 미적용 (다음 연도 자료를 아직 안 넣은 것이므로 재직 중으로 판단)
+          if (!inferredDate && lastNonZeroMonth === 12 && year !== maxYear) {
+              const empKey = getEmpKey(emp);
+              const appearsLater = numericYears.some(y => y > year && empKeysByYear[y]?.has(empKey));
+              if (!appearsLater) {
+                  inferredDate = getLastDayOfMonth(year, 12);
+                  reason = '다음연도 자료 없음';
+              }
+          }
+
+          if (inferredDate) {
+              emp.퇴사일 = inferredDate;
+              // 사유 문자열 자체를 플래그로 사용 (truthy + 사유 정보 동시 보유)
+              emp._inferredRetire = reason;
+              inferredRetireList.push({
+                  year: yearStr,
+                  name: emp.성명,
+                  id: emp.주민등록번호,
+                  hireDate: emp.입사일,
+                  inferredDate,
+                  reason,
+              });
+          }
+      });
+  });
+
   // --- 시트 생성 시작 ---
 
   // 스타일 정의
@@ -200,6 +288,26 @@ export async function generateExcel(results) {
       { header: '주민등록번호', key: 'jumin', width: 20 },
     ];
     allChanges.forEach(item => ws.addRow(item));
+  }
+
+  // 2-1. 퇴사간주자 목록 시트
+  if (inferredRetireList.length > 0) {
+      const wsInferred = workbook.addWorksheet('퇴사간주자 목록');
+      wsInferred.columns = [
+          { header: '연도', key: 'year', width: 10 },
+          { header: '성명', key: 'name', width: 15 },
+          { header: '주민등록번호', key: 'id', width: 20 },
+          { header: '입사일', key: 'hireDate', width: 15 },
+          { header: '퇴사간주일', key: 'inferredDate', width: 15 },
+          { header: '간주사유', key: 'reason', width: 25 },
+      ];
+      wsInferred.getRow(1).eachCell(cell => { cell.style = headerStyle; });
+      inferredRetireList.forEach(item => {
+          const row = wsInferred.addRow(item);
+          row.getCell('inferredDate').fill = {
+              type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFA500' }
+          };
+      });
   }
 
   // 3. 법인세신고서 (통합) 시트
@@ -536,7 +644,7 @@ export async function generateExcel(results) {
       const safeSheetName = sheetName.replace(/[\\/?*[\]]/g, '_').substring(0, 31);
       const worksheet = workbook.addWorksheet(safeSheetName);
       
-      const headers = ['성명', '주민등록번호', '입사일', '퇴사일', '급여계', '상여계', '총급여액'];
+      const headers = ['성명', '주민등록번호', '입사일', '퇴사일', '퇴사간주사유', '급여계', '상여계', '총급여액'];
       for (let i = 1; i <= 12; i++) headers.push(`${i}월 급여`);
       for (let i = 1; i <= 12; i++) headers.push(`${i}월 상여`);
       
@@ -560,25 +668,37 @@ export async function generateExcel(results) {
           emp.주민등록번호,
           emp.입사일,
           emp.퇴사일,
+          (typeof emp._inferredRetire === 'string' ? emp._inferredRetire : '') || emp._inferredRetireReason || '',
           salaryTotal,
           bonusTotal,
           salaryTotal + bonusTotal
         ];
         for (let i = 1; i <= 12; i++) rowData.push(emp.monthly_salary[i]);
         for (let i = 1; i <= 12; i++) rowData.push(emp.monthly_bonus[i]);
-        
+
         const row = worksheet.addRow(rowData);
         row.eachCell((cell, colNumber) => {
           cell.border = borderStyle;
-          if (colNumber <= 4) cell.alignment = { vertical: 'middle', horizontal: 'center' };
+          if (colNumber <= 5) cell.alignment = { vertical: 'middle', horizontal: 'center' };
           else cell.style = { ...cell.style, ...numberStyle };
         });
+
+        // 퇴사간주자이면 퇴사일 셀(4번째) + 사유 셀(5번째) 주황색 표시
+        if (emp._inferredRetire) {
+            row.getCell(4).fill = {
+                type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFA500' }
+            };
+            row.getCell(5).fill = {
+                type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFA500' }
+            };
+        }
       });
 
       worksheet.columns.forEach((col, index) => {
-          if (index === 0) col.width = 12; 
+          if (index === 0) col.width = 12;
           else if (index === 1) col.width = 18;
           else if (index === 2 || index === 3) col.width = 12;
+          else if (index === 4) col.width = 16; // 퇴사간주사유
           else col.width = 12;
       });
     };

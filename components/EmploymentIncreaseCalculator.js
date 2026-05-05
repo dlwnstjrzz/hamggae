@@ -444,7 +444,28 @@ const EmployeeListTable = ({ yearData, onUpdateExclusion, formatNumber, isIntegr
                         </td>
                         <td className="text-sm opacity-70">
                             <div>{emp.hireDate}</div>
-                            <div className="opacity-60">{emp.retireDate || '-'}</div>
+                            <div className="flex items-center gap-1 flex-wrap">
+                                <span className="opacity-60">{emp.retireDate || '-'}</span>
+                                {emp.inferredRetire && (
+                                    <>
+                                        <span
+                                            className="badge badge-sm border-none text-white font-extrabold shadow-sm"
+                                            style={{ backgroundColor: '#EA580C', fontSize: '10px' }}
+                                            title={emp.inferredRetireReason || '퇴사간주'}
+                                        >
+                                            간주
+                                        </span>
+                                        {emp.inferredRetireReason && (
+                                            <span
+                                                className="text-[11px] font-semibold"
+                                                style={{ color: '#C2410C' }}
+                                            >
+                                                {emp.inferredRetireReason}
+                                            </span>
+                                        )}
+                                    </>
+                                )}
+                            </div>
                         </td>
                         <td className={`text-right font-mono ${emp.exclusionReason ? 'opacity-40' : ''}`}>
                             {formatNumber(emp.totalSalary)}

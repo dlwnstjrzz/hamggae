@@ -104,6 +104,7 @@ export default function Home() {
             setCalculatorRenderKey((prev) => prev + 1);
             setLoadingSessionId(null);
             message.success('저장된 계산을 불러왔습니다.');
+            window.history.replaceState({}, '', '/');
         };
 
         loadSavedSession();

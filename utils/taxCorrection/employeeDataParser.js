@@ -255,7 +255,7 @@ function analyzeYouthStatus(name, id, hireDate, retireDate, row, salaryStartCol,
       socialInsuranceNormalSalary,
       socialInsuranceExcludedSalary,
       resignationExcludedMonth,
-      isYouth: youthMonths > 0 // Add this for frontend filtering/styling
+      isYouth: youthMonths > 0, // Add this for frontend filtering/styling
   };
 }
 
@@ -266,11 +266,12 @@ export function analyzeEmployee(empObj, year, executivePeriods = []) {
     const id = empObj['주민등록번호'] || '';
     const hireDate = empObj['입사일'] ? new Date(empObj['입사일']) : null;
     const retireDate = empObj['퇴사일'] ? new Date(empObj['퇴사일']) : null;
-    
-    // Re-use logic or duplicate for JSON structure?
-    // Since the original logic relies on row/col parsing, it's easier to duplicate the core logic adapted for JSON
-    
-    return calculateEmployeeTaxStatus(name, id, hireDate, retireDate, empObj, year, executivePeriods);
+
+    const result = calculateEmployeeTaxStatus(name, id, hireDate, retireDate, empObj, year, executivePeriods);
+    if (empObj['_inferredRetire']) {
+        console.log(`[DEBUG-ANALYZE] ${name} (${year}): _inferredRetire=${empObj['_inferredRetire']}, _inferredRetireReason=${empObj['_inferredRetireReason']}, result.inferredRetire=${result.inferredRetire}, result.inferredRetireReason=${result.inferredRetireReason}`);
+    }
+    return result;
 }
 
 function calculateEmployeeTaxStatus(name, id, hireDate, retireDate, empObj, year, executivePeriods = []) {
@@ -444,6 +445,8 @@ function calculateEmployeeTaxStatus(name, id, hireDate, retireDate, empObj, year
         socialInsuranceExcludedSalary,
         resignationExcludedMonth,
         isYouth: youthMonths > 0,
+        inferredRetire: !!empObj?._inferredRetire,
+        inferredRetireReason: empObj?._inferredRetireReason || null,
         executivePeriods
     };
 }
@@ -456,4 +459,3 @@ function calculateManAge(birthDate, targetDate) {
     }
     return age;
 }
-
