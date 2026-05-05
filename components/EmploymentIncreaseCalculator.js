@@ -494,6 +494,7 @@ const EmployeeListTable = ({ yearData, onUpdateExclusion, formatNumber, isIntegr
                                 <option value={emp.executivePeriods && emp.executivePeriods.length > 0 ? 'partial_exec' : '임원'} className="text-error font-bold">임원</option>
                                 <option value="최대주주및가족" className="text-error font-bold">최대주주 및 친족</option>
                                 <option value="대표자가족" className="text-error font-bold">대표자 가족</option>
+                                <option value="재직기간1년미만" className="text-error font-bold">재직기간 1년 미만</option>
                                 <option value="기타" className="text-base-content font-bold">계약직/기타</option>
                             </select>
                         </td>
@@ -732,6 +733,53 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
 
   const handleRecalculate = () => {
       performCalculation(processedData, settings);
+  };
+
+  const getShortTermResignerIds = () => {
+    const grouped = {};
+
+    processedData.forEach(d => {
+        if (!grouped[d.id]) {
+            grouped[d.id] = {
+                hireDate: d.hireDate,
+                retireDate: d.retireDate
+            };
+        }
+        if (d.hireDate && !grouped[d.id].hireDate) grouped[d.id].hireDate = d.hireDate;
+        if (d.retireDate && !grouped[d.id].retireDate) grouped[d.id].retireDate = d.retireDate;
+    });
+
+    return Object.entries(grouped)
+        .filter(([, emp]) => {
+            if (!emp.hireDate || !emp.retireDate) return false;
+
+            const hDate = new Date(emp.hireDate);
+            const rDate = new Date(emp.retireDate);
+            if (Number.isNaN(hDate.getTime()) || Number.isNaN(rDate.getTime())) return false;
+
+            const diffTime = Math.abs(rDate - hDate);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            return diffDays <= 365;
+        })
+        .map(([id]) => id);
+  };
+
+  const handleExcludeShortTermEmployees = () => {
+    const shortTermIds = new Set(getShortTermResignerIds());
+    if (shortTermIds.size === 0) return;
+
+    const newData = processedData.map(d => {
+        if (!shortTermIds.has(d.id)) return d;
+        return {
+            ...d,
+            exclusionReason: '재직기간1년미만',
+            forceIncludeExec: false
+        };
+    });
+
+    setProcessedData(newData);
+    setIsCalculated(false);
+    setShowClawback(false);
   };
 
   const updateExclusion = (empIndex, reason) => {
@@ -1038,38 +1086,46 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
       return (
           <div className="card bg-base-100 shadow-sm border border-base-200 mt-8">
               <div className="card-body p-6">
-                  <div className="flex justify-between items-center mb-4">
+                  <div className="flex justify-between items-center mb-4 gap-3">
                       <h3 className="card-title text-base-content flex items-center gap-2 m-0">
                           <span className="text-xl">🚫</span> 제외 대상자 명단
                       </h3>
-                      <div className="w-full max-w-[240px] relative">
-                          <input
-                              name="exclude-employee-search"
-                              type="text"
-                              className="input input-sm input-bordered w-full"
-                              placeholder="+ 사원 검색하여 추가"
-                              value={excludeQuery}
-                              onChange={(e) => setExcludeQuery(e.target.value)}
-                              onKeyDown={(e) => {
-                                  if (e.key === 'Enter' && filteredEmployees.length === 1) {
-                                      addExcludedEmployee(filteredEmployees[0].id);
-                                  }
-                              }}
-                          />
-                          {filteredEmployees.length > 0 && (
-                              <div className="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto rounded-md border border-base-200 bg-base-100 shadow">
-                                  {filteredEmployees.slice(0, 8).map(emp => (
-                                      <button
-                                          key={emp.id}
-                                          type="button"
-                                          className="w-full text-left px-3 py-2 hover:bg-base-200 text-sm"
-                                          onClick={() => addExcludedEmployee(emp.id)}
-                                      >
-                                          {emp.name} ({emp.id})
-                                      </button>
-                                  ))}
-                              </div>
-                          )}
+                      <div className="flex items-center gap-2 w-full justify-end">
+                          <div
+                              className="badge badge-warning h-9 px-4 cursor-pointer font-bold border-none text-white flex items-center gap-2 shadow-sm whitespace-nowrap"
+                              onClick={handleExcludeShortTermEmployees}
+                          >
+                              재직기간 1년 미만 전체 제외
+                          </div>
+                          <div className="w-full max-w-[240px] relative">
+                              <input
+                                  name="exclude-employee-search"
+                                  type="text"
+                                  className="input input-sm input-bordered w-full"
+                                  placeholder="+ 사원 검색하여 추가"
+                                  value={excludeQuery}
+                                  onChange={(e) => setExcludeQuery(e.target.value)}
+                                  onKeyDown={(e) => {
+                                      if (e.key === 'Enter' && filteredEmployees.length === 1) {
+                                          addExcludedEmployee(filteredEmployees[0].id);
+                                      }
+                                  }}
+                              />
+                              {filteredEmployees.length > 0 && (
+                                  <div className="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto rounded-md border border-base-200 bg-base-100 shadow">
+                                      {filteredEmployees.slice(0, 8).map(emp => (
+                                          <button
+                                              key={emp.id}
+                                              type="button"
+                                              className="w-full text-left px-3 py-2 hover:bg-base-200 text-sm"
+                                              onClick={() => addExcludedEmployee(emp.id)}
+                                          >
+                                              {emp.name} ({emp.id})
+                                          </button>
+                                      ))}
+                                  </div>
+                              )}
+                          </div>
                       </div>
                   </div>
                   <div className="overflow-x-auto">
@@ -1116,6 +1172,7 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
                                                           <option value={yearData && yearData.executivePeriods && yearData.executivePeriods.length > 0 ? 'partial_exec' : '임원'} className="text-error font-bold">임원</option>
                                                           <option value="최대주주및가족" className="text-error font-bold">최대주주/친족</option>
                                                           <option value="대표자가족" className="text-error font-bold">대표자 가족</option>
+                                                          <option value="재직기간1년미만" className="text-error font-bold">재직기간 1년 미만</option>
                                                           <option value="기타" className="text-base-content font-bold">계약직/기타</option>
                                                       </select>
                                                       <div className={`font-mono ${isExcluded || hasExec ? 'line-through text-base-content/40' : ''}`}>
