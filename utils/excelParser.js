@@ -262,12 +262,13 @@ export async function parseExcel(file) {
               }
           }
 
-          // Case 2: 12월까지 급여 있으나 이후 연도에 자료 없음
+          // Case 2: 12월까지 급여 있으나 바로 다음 연도에 자료 없음
           // → 최신 연도는 미적용 (다음 연도 자료를 아직 안 넣은 것이므로 재직 중으로 판단)
           if (!inferredDate && lastNonZeroMonth === 12 && year !== maxYear) {
               const empKey = getEmpKey(emp);
-              const appearsLater = numericYears.some(y => y > year && empKeysByYear[y]?.has(empKey));
-              if (!appearsLater) {
+              const nextYear = year + 1;
+              const appearsNextYear = empKeysByYear[nextYear]?.has(empKey);
+              if (!appearsNextYear) {
                   inferredDate = getLastDay(year, 12);
                   inferredReason = '다음연도 자료 없음';
               }
