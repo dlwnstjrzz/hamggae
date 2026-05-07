@@ -1091,12 +1091,12 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
                           <span className="text-xl">🚫</span> 제외 대상자 명단
                       </h3>
                       <div className="flex items-center gap-2 w-full justify-end">
-                          {/* <div
+                          <div
                               className="badge badge-warning h-9 px-4 cursor-pointer font-bold border-none text-white flex items-center gap-2 shadow-sm whitespace-nowrap"
                               onClick={handleExcludeShortTermEmployees}
                           >
                               재직기간 1년 미만 전체 제외
-                          </div> */}
+                          </div>
                           <div className="w-full max-w-[240px] relative">
                               <input
                                   name="exclude-employee-search"
