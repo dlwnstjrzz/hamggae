@@ -104,7 +104,9 @@ export async function generateExcel(results) {
   const dataByYear = {};
   const frontNumberGroups = {};
   const missingJuminList = [];
+  const rehireCandidates = [];
   const allYears = new Set(); // 등기부 필터링용 연도 집합
+  const rehireNamePattern = /[()[\]{}<>.,/\\|!@#$%^&*_+=~`'":;?-]/;
 
   withholdingResults.forEach(res => {
     let year = res.year;
@@ -118,6 +120,16 @@ export async function generateExcel(results) {
     res.employees.forEach(emp => {
       const jumin = emp.주민등록번호 ? emp.주민등록번호.trim() : '';
       const name = emp.성명 || '(이름없음)';
+
+      if (rehireNamePattern.test(name)) {
+        rehireCandidates.push({
+          year,
+          name,
+          id: jumin,
+          hireDate: emp.입사일 || '',
+          retireDate: emp.퇴사일 || '',
+        });
+      }
 
       // 1. 주민번호 누락 체크
       // 정상 패턴: 6~7자리 숫자 + - + 6~7자리 (숫자 또는 *)
@@ -281,7 +293,34 @@ export async function generateExcel(results) {
     missingJuminList.forEach(item => ws.addRow(item));
   }
 
-  // 2. 동일앞번호 시트
+  // 2. 재입사 인원 시트
+  if (rehireCandidates.length > 0) {
+    const ws = workbook.addWorksheet('재입사 인원');
+    ws.columns = [
+      { header: '연도', key: 'year', width: 10 },
+      { header: '성명', key: 'name', width: 18 },
+      { header: '주민등록번호', key: 'id', width: 20 },
+      { header: '입사일', key: 'hireDate', width: 15 },
+      { header: '퇴사일', key: 'retireDate', width: 15 },
+    ];
+    ws.getRow(1).eachCell(cell => { cell.style = headerStyle; });
+
+    const uniqueRehireCandidates = Array.from(
+      new Map(
+        rehireCandidates.map(item => [
+          `${item.year}__${item.name}__${item.id}__${item.hireDate}__${item.retireDate}`,
+          item
+        ])
+      ).values()
+    ).sort((a, b) => {
+      if (String(a.year) !== String(b.year)) return String(a.year).localeCompare(String(b.year));
+      return String(a.name).localeCompare(String(b.name), 'ko');
+    });
+
+    uniqueRehireCandidates.forEach(item => ws.addRow(item));
+  }
+
+  // 3. 동일앞번호 시트
   if (allChanges.length > 0) {
     const ws = workbook.addWorksheet('동일앞번호');
     ws.columns = [
@@ -291,7 +330,7 @@ export async function generateExcel(results) {
     allChanges.forEach(item => ws.addRow(item));
   }
 
-  // 2-1. 퇴사간주자 목록 시트
+  // 3-1. 퇴사간주자 목록 시트
   if (inferredRetireList.length > 0) {
       const wsInferred = workbook.addWorksheet('퇴사간주자 목록');
       wsInferred.columns = [
@@ -311,7 +350,7 @@ export async function generateExcel(results) {
       });
   }
 
-  // 3. 법인세신고서 (통합) 시트
+  // 4. 법인세신고서 (통합) 시트
   const sortedYears = Array.from(allYears).sort((a, b) => a - b).map(String);
   const hasTaxData = taxReturnResults.length > 0;
   const hasRegistryData = registryResults.length > 0;
