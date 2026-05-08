@@ -172,12 +172,12 @@ function calculateIntegratedCredit(annualStats, settings) {
         return stat;
     });
 
-    const results = calculateCumulativeCredits(integratedStats, youthRate, otherRate, 2023);
+    const results = calculateCumulativeCredits(integratedStats, youthRate, otherRate, 2023, true);
     return results.filter(r => r.year >= 2023);
 }
 
 // Shared Helper for Cumulative Calculation (1st, 2nd, 3rd year)
-function calculateCumulativeCredits(annualStats, youthRate, otherRate, startYear = null) {
+function calculateCumulativeCredits(annualStats, youthRate, otherRate, startYear = null, convertAllToOtherOnYouthDecrease = false) {
     const initialCredits = {}; // { 2022: { amount: 1000, baseCount: 10.5, youthInc: 1, otherInc: 0 } }
     const calculations = [];
     
@@ -241,8 +241,9 @@ function calculateCumulativeCredits(annualStats, youthRate, otherRate, startYear
         if (credit2ndObj && currentOverallCount >= credit2ndObj.requiredMaintenanceCount) {
             let youthDec = Math.max(0, credit2ndObj.requiredMaintenanceYouthCount - stat.youthCount);
             if (youthDec > 0) {
-                let effectiveYouth = Math.max(0, credit2ndObj.youthIncreaseRecognized - youthDec);
-                let effectiveOther = (credit2ndObj.youthIncreaseRecognized + credit2ndObj.otherIncreaseRecognized) - effectiveYouth;
+                const totalRecognized = credit2ndObj.youthIncreaseRecognized + credit2ndObj.otherIncreaseRecognized;
+                let effectiveYouth = convertAllToOtherOnYouthDecrease ? 0 : Math.max(0, credit2ndObj.youthIncreaseRecognized - youthDec);
+                let effectiveOther = totalRecognized - effectiveYouth;
                 let yRate = credit2ndObj.appliedYouthRate;
                 let oRate = credit2ndObj.appliedOtherRate;
                 credit2nd = Math.floor((effectiveYouth * yRate + effectiveOther * oRate) * 10000);
@@ -260,8 +261,9 @@ function calculateCumulativeCredits(annualStats, youthRate, otherRate, startYear
         if (credit3rdObj && !failedInSecondYear && currentOverallCount >= credit3rdObj.requiredMaintenanceCount) {
             let youthDec = Math.max(0, credit3rdObj.requiredMaintenanceYouthCount - stat.youthCount);
             if (youthDec > 0) {
-                let effectiveYouth = Math.max(0, credit3rdObj.youthIncreaseRecognized - youthDec);
-                let effectiveOther = (credit3rdObj.youthIncreaseRecognized + credit3rdObj.otherIncreaseRecognized) - effectiveYouth;
+                const totalRecognized = credit3rdObj.youthIncreaseRecognized + credit3rdObj.otherIncreaseRecognized;
+                let effectiveYouth = convertAllToOtherOnYouthDecrease ? 0 : Math.max(0, credit3rdObj.youthIncreaseRecognized - youthDec);
+                let effectiveOther = totalRecognized - effectiveYouth;
                 let yRate = credit3rdObj.appliedYouthRate;
                 let oRate = credit3rdObj.appliedOtherRate;
                 credit3rd = Math.floor((effectiveYouth * yRate + effectiveOther * oRate) * 10000);
