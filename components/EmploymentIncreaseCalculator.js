@@ -1725,10 +1725,19 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
                 <div className="space-y-8 animate-in fade-in">
                      {/* Calculation Result Table */}
                      <div className="card shadow-sm bg-base-100 border border-base-200">
-                             <div className="card-body p-6">
+                            <div className="card-body p-6">
                             <h3 className="card-title mb-6 flex items-center justify-between">
                                 <span>💰 통합고용 세액공제 계산 결과 (2023년 이후)</span>
-                                <div className="badge badge-ghost text-sm font-normal">청년 등 / 청년 외 구분</div>
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        className="btn btn-sm btn-outline gap-2"
+                                        onClick={() => downloadIntegratedEmploymentList(processedData)}
+                                    >
+                                        <DownloadOutlined />
+                                        통합고용 상시근로자 리스트 다운로드
+                                    </button>
+                                    <div className="badge badge-ghost text-sm font-normal">청년 등 / 청년 외 구분</div>
+                                </div>
                             </h3>
                             
                             <div className="overflow-x-auto">
@@ -1899,16 +1908,7 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
                      
                      {/* Regular Employee List */}
                      <div className="mt-8">
-                         <div className="flex items-center justify-between mb-4 px-2">
-                             <h3 className="font-bold text-md">연도별 상시근로자 리스트</h3>
-                             <button
-                                 className="btn btn-sm btn-outline gap-2"
-                                 onClick={() => downloadIntegratedEmploymentList(processedData)}
-                             >
-                                 <DownloadOutlined />
-                                 통합고용 상시근로자 리스트 다운로드
-                             </button>
-                         </div>
+                         <h3 className="font-bold text-md mb-4 px-2">연도별 상시근로자 리스트</h3>
                           <YearTabs data={processedData.filter(d => d.year >= 2022)}>
                              {(year, yearData) => (
                                  <EmployeeListTable
@@ -1931,7 +1931,16 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
                              <div className="card-body p-6">
                             <h3 className="card-title mb-6 flex items-center justify-between">
                                 <span>💰 고용증대 세액공제 계산 결과 (전체 연도)</span>
-                                <div className="badge badge-ghost text-sm font-normal">청년 등 / 청년 외 구분</div>
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        className="btn btn-sm btn-outline gap-2"
+                                        onClick={() => downloadEmploymentIncreaseList(processedData)}
+                                    >
+                                        <DownloadOutlined />
+                                        고용증대 상시근로자 리스트 다운로드
+                                    </button>
+                                    <div className="badge badge-ghost text-sm font-normal">청년 등 / 청년 외 구분</div>
+                                </div>
                             </h3>
                             
                             <div className="overflow-x-auto">
@@ -2099,16 +2108,7 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
                      
                      {/* Regular Employee List */}
                      <div className="mt-8">
-                         <div className="flex items-center justify-between mb-4 px-2">
-                             <h3 className="font-bold text-md">연도별 상시근로자 리스트</h3>
-                             <button
-                                 className="btn btn-sm btn-outline gap-2"
-                                 onClick={() => downloadEmploymentIncreaseList(processedData)}
-                             >
-                                 <DownloadOutlined />
-                                 고용증대 상시근로자 리스트 다운로드
-                             </button>
-                         </div>
+                         <h3 className="font-bold text-md mb-4 px-2">연도별 상시근로자 리스트</h3>
                           <YearTabs data={processedData}>
                              {(year, yearData) => (
                                  <EmployeeListTable
@@ -2131,7 +2131,16 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
                              <div className="card-body p-6">
                             <h3 className="card-title mb-6 flex items-center justify-between">
                                 <span>🛡️ 사회보험료 세액공제 계산 결과</span>
-                                <div className="badge badge-ghost text-sm font-normal">상시근로자 수 및 사회보험료 대상 급여</div>
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        className="btn btn-sm btn-outline gap-2"
+                                        onClick={() => downloadSocialInsuranceList(processedData)}
+                                    >
+                                        <DownloadOutlined />
+                                        사회보험 상시근로자 리스트 다운로드
+                                    </button>
+                                    <div className="badge badge-ghost text-sm font-normal">상시근로자 수 및 사회보험료 대상 급여</div>
+                                </div>
                             </h3>
                             
                             <div className="overflow-x-auto">
@@ -2329,16 +2338,7 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
                      
                      
                      <div className="mt-8">
-                         <div className="flex items-center justify-between mb-4 px-2">
-                             <h3 className="font-bold text-md">연도별 상시근로자 리스트</h3>
-                             <button
-                                 className="btn btn-sm btn-outline gap-2"
-                                 onClick={() => downloadSocialInsuranceList(processedData)}
-                             >
-                                 <DownloadOutlined />
-                                 사회보험 상시근로자 리스트 다운로드
-                             </button>
-                         </div>
+                         <h3 className="font-bold text-md mb-4 px-2">연도별 상시근로자 리스트</h3>
                          <YearTabs data={processedData}>
                              {(year, yearData) => (
                                  <EmployeeListTable
