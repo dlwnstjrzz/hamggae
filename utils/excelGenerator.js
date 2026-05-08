@@ -444,51 +444,132 @@ export async function downloadIncomeIncreaseList(incomeIncreaseResults) {
     workbook.creator = 'Mega-Info Consulting';
     workbook.created = new Date();
 
-    const includedColumns = [
-        { header: '성명', key: 'name', width: 12 },
-        { header: '입사일', key: 'hireDate', width: 12 },
-        { header: '퇴사일', key: 'retireDate', width: 12 },
-        { header: '총급여', key: 'totalSalary', width: 15, style: { numFmt: '#,##0' } },
-        { header: '근속월수', key: 'totalMonths', width: 12, style: { numFmt: '0' } },
-    ];
-    const excludedColumns = [
-        ...includedColumns,
-        { header: '제외사유', key: 'reason', width: 25 },
-    ];
-
     [...incomeIncreaseResults.results].sort((a, b) => a.year - b.year).forEach(record => {
         const targetYear = record.year;
+        const sheet = workbook.addWorksheet(`${targetYear}년 귀속분`);
+        const historyYears = Object.keys(record.history || {})
+            .map(Number)
+            .sort((a, b) => a - b);
 
-        const includedEmps = record.history?.[targetYear]?.includedEmployees || record.includedEmployees || [];
-        const includedSheet = workbook.addWorksheet(`${targetYear}년 귀속분 포함대상`);
-        includedSheet.columns = includedColumns;
-        includedSheet.getRow(1).font = { bold: true };
-        includedSheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
-        [...includedEmps].sort((a, b) => (b.totalSalary || 0) - (a.totalSalary || 0)).forEach(emp => {
-            includedSheet.addRow({
-                name: emp.name,
-                hireDate: emp.hireDate,
-                retireDate: emp.retireDate || '',
-                totalSalary: emp.totalSalary || 0,
-                totalMonths: (emp.youthMonths || 0) + (emp.normalMonths || 0),
+        const includedBg = 'FFE8F2FF';
+        const excludedBg = 'FFFFF1F2';
+        const yearBg = 'FFEFF6E0';
+        const border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' },
+        };
+
+        const writeCell = (row, col, value, fillColor = null, bold = false, numFmt = null) => {
+            const cell = sheet.getCell(row, col);
+            cell.value = value;
+            cell.border = border;
+            cell.font = { bold };
+            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+            if (fillColor) {
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: fillColor },
+                };
+            }
+            if (numFmt) cell.numFmt = numFmt;
+        };
+
+        const getTotalMonths = (emp) => (emp.youthMonths || 0) + (emp.normalMonths || 0);
+        const sortBySalary = (employees) => [...employees].sort((a, b) => (b.totalSalary || 0) - (a.totalSalary || 0));
+        const blockWidth = 9;
+        const gapWidth = 1;
+
+        historyYears.forEach((year, index) => {
+            const yearData = record.history?.[year] || {};
+            const includedEmps = sortBySalary(yearData.includedEmployees || []);
+            const excludedEmps = sortBySalary(yearData.excludedEmployees || []);
+            const startCol = 1 + index * (blockWidth + gapWidth);
+            const includedStart = startCol;
+            const excludedStart = startCol + 4;
+
+            sheet.mergeCells(1, startCol, 1, startCol + blockWidth - 1);
+            writeCell(1, startCol, `${year}년`, yearBg, true);
+
+            sheet.mergeCells(2, includedStart, 2, includedStart + 3);
+            writeCell(2, includedStart, '포함 대상', includedBg, true);
+            sheet.mergeCells(2, excludedStart, 2, excludedStart + 4);
+            writeCell(2, excludedStart, '제외 대상', excludedBg, true);
+
+            ['성명', '주민등록번호', '근무개월수', '총급여액'].forEach((header, offset) => {
+                writeCell(3, includedStart + offset, header, includedBg, true);
             });
+            ['성명', '주민등록번호', '근무개월수', '총급여액', '제외사유'].forEach((header, offset) => {
+                writeCell(3, excludedStart + offset, header, excludedBg, true);
+            });
+
+            const rowCount = Math.max(includedEmps.length, excludedEmps.length, 1);
+            for (let i = 0; i < rowCount; i++) {
+                const row = 4 + i;
+                const included = includedEmps[i];
+                const excluded = excludedEmps[i];
+
+                writeCell(row, includedStart, included?.name || '');
+                writeCell(row, includedStart + 1, included?.id || '');
+                writeCell(row, includedStart + 2, included ? getTotalMonths(included) : '', null, false, '0');
+                writeCell(row, includedStart + 3, included ? (included.totalSalary || 0) : '', null, false, '#,##0');
+
+                writeCell(row, excludedStart, excluded?.name || '');
+                writeCell(row, excludedStart + 1, excluded?.id || '');
+                writeCell(row, excludedStart + 2, excluded ? getTotalMonths(excluded) : '', null, false, '0');
+                writeCell(row, excludedStart + 3, excluded ? (excluded.totalSalary || 0) : '', null, false, '#,##0');
+                writeCell(row, excludedStart + 4, excluded?.reason || '');
+            }
+
+            const totalRow = 4 + rowCount;
+            writeCell(totalRow, includedStart, '합계', includedBg, true);
+            writeCell(totalRow, includedStart + 1, includedEmps.length, includedBg, true, '0');
+            writeCell(
+                totalRow,
+                includedStart + 2,
+                includedEmps.reduce((sum, emp) => sum + getTotalMonths(emp), 0),
+                includedBg,
+                true,
+                '0'
+            );
+            writeCell(
+                totalRow,
+                includedStart + 3,
+                includedEmps.reduce((sum, emp) => sum + (emp.totalSalary || 0), 0),
+                includedBg,
+                true,
+                '#,##0'
+            );
+
+            writeCell(totalRow, excludedStart, '합계', excludedBg, true);
+            writeCell(totalRow, excludedStart + 1, excludedEmps.length, excludedBg, true, '0');
+            writeCell(
+                totalRow,
+                excludedStart + 2,
+                excludedEmps.reduce((sum, emp) => sum + getTotalMonths(emp), 0),
+                excludedBg,
+                true,
+                '0'
+            );
+            writeCell(
+                totalRow,
+                excludedStart + 3,
+                excludedEmps.reduce((sum, emp) => sum + (emp.totalSalary || 0), 0),
+                excludedBg,
+                true,
+                '#,##0'
+            );
+            writeCell(totalRow, excludedStart + 4, '', excludedBg, true);
         });
 
-        const excludedEmps = record.history?.[targetYear]?.excludedEmployees || record.excludedEmployees || [];
-        const excludedSheet = workbook.addWorksheet(`${targetYear}년 귀속분 미포함대상`);
-        excludedSheet.columns = excludedColumns;
-        excludedSheet.getRow(1).font = { bold: true };
-        excludedSheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
-        [...excludedEmps].sort((a, b) => (b.totalSalary || 0) - (a.totalSalary || 0)).forEach(emp => {
-            excludedSheet.addRow({
-                name: emp.name,
-                hireDate: emp.hireDate,
-                retireDate: emp.retireDate || '',
-                totalSalary: emp.totalSalary || 0,
-                totalMonths: (emp.youthMonths || 0) + (emp.normalMonths || 0),
-                reason: emp.reason || '',
-            });
-        });
+        for (let col = 1; col <= historyYears.length * (blockWidth + gapWidth); col++) {
+            const mod = (col - 1) % (blockWidth + gapWidth);
+            if (mod === 4 || mod === 8) sheet.getColumn(col).width = 14;
+            else if (mod === 9) sheet.getColumn(col).width = 3;
+            else sheet.getColumn(col).width = 12;
+        }
     });
 
     await downloadWorkbook(workbook, `근로소득증대_상시근로자_리스트_${new Date().toISOString().slice(0, 10)}.xlsx`);
