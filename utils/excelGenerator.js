@@ -271,6 +271,118 @@ async function downloadWorkbook(workbook, fileName) {
     window.URL.revokeObjectURL(url);
 }
 
+function createSummaryExclusionSheet(workbook, sheetName, employees, allYears) {
+    const sheet = workbook.addWorksheet(sheetName);
+    const grouped = {};
+
+    employees.forEach(emp => {
+        const hasExecutiveExclusion = emp.executivePeriods && emp.executivePeriods.length > 0 && !emp.forceIncludeExec;
+        if (!grouped[emp.id]) {
+            grouped[emp.id] = {
+                name: emp.name,
+                id: emp.id,
+                hireDate: emp.hireDate || '',
+                retireDate: emp.retireDate || '',
+                years: {},
+            };
+        }
+
+        grouped[emp.id].years[emp.year] = {
+            exclusionReason: emp.exclusionReason || (hasExecutiveExclusion ? '임원' : ''),
+            totalSalary: emp.totalSalary || 0,
+        };
+        if (!grouped[emp.id].hireDate && emp.hireDate) grouped[emp.id].hireDate = emp.hireDate;
+        if (!grouped[emp.id].retireDate && emp.retireDate) grouped[emp.id].retireDate = emp.retireDate;
+    });
+
+    sheet.columns = [
+        { header: '이름', key: 'name', width: 12 },
+        { header: '인적 사항', key: 'info', width: 24 },
+        ...allYears.map(year => ({ header: `${year}년`, key: `year_${year}`, width: 18 })),
+    ];
+    sheet.getRow(1).font = { bold: true };
+    sheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+    Object.values(grouped)
+        .sort((a, b) => a.name.localeCompare(b.name, 'ko') || a.id.localeCompare(b.id, 'ko'))
+        .forEach(person => {
+            const row = {
+                name: person.name,
+                info: `${person.id || ''}${person.hireDate || person.retireDate ? `\n${person.hireDate || ''}${person.retireDate ? ` / ${person.retireDate}` : ''}` : ''}`,
+            };
+
+            allYears.forEach(year => {
+                const yearData = person.years[year];
+                row[`year_${year}`] = yearData
+                    ? `${yearData.exclusionReason || '제외'}\n${new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 0 }).format(yearData.totalSalary)}`
+                    : '';
+            });
+
+            sheet.addRow(row);
+        });
+
+    sheet.eachRow((row, rowNumber) => {
+        row.height = rowNumber === 1 ? 22 : 34;
+        row.eachCell(cell => {
+            cell.alignment = {
+                vertical: 'middle',
+                horizontal: rowNumber === 1 ? 'center' : 'center',
+                wrapText: true,
+            };
+        });
+    });
+
+    allYears.forEach((year, index) => {
+        const col = sheet.getColumn(index + 3);
+        col.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    });
+}
+
+function sortSummaryEmployeeList(employees) {
+    return [...employees].sort((a, b) => {
+        if (b.year !== a.year) return b.year - a.year;
+        if (a.exclusionReason && !b.exclusionReason) return 1;
+        if (!a.exclusionReason && b.exclusionReason) return -1;
+        return (b.totalSalary || 0) - (a.totalSalary || 0);
+    });
+}
+
+export async function downloadSummaryEmployeeLists(processedData, manuallyExcludedIds = []) {
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Mega-Info Consulting';
+    workbook.created = new Date();
+
+    const excludedIds = new Set(manuallyExcludedIds);
+    processedData.forEach(emp => {
+        if (emp.exclusionReason || (emp.executivePeriods && emp.executivePeriods.length > 0 && !emp.forceIncludeExec)) {
+            excludedIds.add(emp.id);
+        }
+    });
+
+    const dataByYear = {};
+    const allYears = [...new Set(processedData.map(emp => emp.year))].sort((a, b) => a - b);
+    processedData.forEach(emp => {
+        if (excludedIds.has(emp.id)) return;
+        if (!dataByYear[emp.year]) dataByYear[emp.year] = [];
+        dataByYear[emp.year].push(emp);
+    });
+
+    Object.keys(dataByYear)
+        .sort((a, b) => b - a)
+        .forEach(year => {
+            createEmployeeListSheet(workbook, `${year}년`, sortEmployeeList(dataByYear[year]), false);
+        });
+
+    createSummaryExclusionSheet(
+        workbook,
+        '제외 대상자 명단',
+        sortSummaryEmployeeList(processedData.filter(emp => excludedIds.has(emp.id))),
+        allYears
+    );
+
+    await downloadWorkbook(workbook, `최종집계_사원리스트_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
 export async function downloadEmploymentIncreaseList(processedData) {
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'Mega-Info Consulting';

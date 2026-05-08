@@ -6,7 +6,7 @@ import { calculateEmploymentIncreaseCredit } from '../utils/taxCorrection/employ
 import { calculateSocialInsuranceClaims } from '../utils/taxCorrection/socialInsurance';
 import { calculateIncomeIncreaseCredit } from '../utils/taxCorrection/incomeIncrease';
 import { aggregateTaxCreditSummary } from '../utils/taxCorrection/summaryHelpers';
-import { generateTaxCreditExcel, downloadShortTermResignersExcel, downloadEmploymentIncreaseList, downloadIntegratedEmploymentList, downloadSocialInsuranceList, downloadIncomeIncreaseList } from '../utils/excelGenerator';
+import { generateTaxCreditExcel, downloadShortTermResignersExcel, downloadEmploymentIncreaseList, downloadIntegratedEmploymentList, downloadSocialInsuranceList, downloadIncomeIncreaseList, downloadSummaryEmployeeLists } from '../utils/excelGenerator';
 
 import { RiseOutlined, TeamOutlined, CalculatorOutlined, FileTextOutlined, SafetyCertificateOutlined, DollarOutlined, ExclamationCircleOutlined, DownloadOutlined, ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
 
@@ -1376,6 +1376,13 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
                             <div className="p-4 border-b border-base-200 bg-base-100 flex justify-between items-center">
                                 <h3 className="font-bold text-lg">📊 최종 집계표</h3>
                                 <div className="flex items-center gap-4">
+                                     <button
+                                         className="btn btn-sm btn-outline gap-2"
+                                         onClick={() => downloadSummaryEmployeeLists(processedData, Array.from(manuallyExcludedIds))}
+                                     >
+                                         <DownloadOutlined />
+                                         사원 리스트 다운로드
+                                     </button>
                                      <div className="flex items-center bg-base-200 rounded-lg p-1">
                                          <button 
                                              onClick={() => setTaxCreditChoice('integrated')}
