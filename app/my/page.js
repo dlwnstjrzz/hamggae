@@ -9,8 +9,10 @@ import { LogoutOutlined } from '@ant-design/icons';
 import { supabase } from '@/utils/supabase';
 import {
     deleteCalculationSession,
+    duplicateCalculationSession,
     getCalculationSessionErrorMessage,
     listCalculationSessions,
+    renameCalculationSession,
 } from '@/utils/calculationSessions';
 
 const { Header, Content, Footer } = Layout;
@@ -23,6 +25,7 @@ export default function MyPage() {
     const [loading, setLoading] = useState(true);
     const [sessions, setSessions] = useState([]);
     const [sessionsLoading, setSessionsLoading] = useState(false);
+    const [sessionActionKey, setSessionActionKey] = useState(null);
 
     useEffect(() => {
         let mounted = true;
@@ -104,6 +107,59 @@ export default function MyPage() {
 
         await fetchSessions();
         message.success('저장된 계산을 삭제했습니다.');
+    };
+
+    const handleRename = async (session) => {
+        const inputTitle = window.prompt('변경할 제목을 입력해주세요.', session.title);
+        if (inputTitle === null) return;
+
+        const title = inputTitle.trim();
+        if (!title) {
+            message.warning('제목을 비워둘 수 없습니다.');
+            return;
+        }
+
+        setSessionActionKey(`rename-${session.id}`);
+        const { error } = await renameCalculationSession(session.id, title);
+
+        if (error) {
+            console.error(error);
+            message.error(getCalculationSessionErrorMessage(error, '제목 변경에 실패했습니다.'));
+        } else {
+            await fetchSessions();
+            message.success('제목을 변경했습니다.');
+        }
+        setSessionActionKey(null);
+    };
+
+    const handleDuplicate = async (session) => {
+        if (!user) {
+            message.warning('로그인 후 이용해주세요.');
+            return;
+        }
+
+        const defaultTitle = `${session.title} 복사본`;
+        const inputTitle = window.prompt('복사본 제목을 입력해주세요.', defaultTitle);
+        if (inputTitle === null) return;
+
+        const title = inputTitle.trim() || defaultTitle;
+        setSessionActionKey(`duplicate-${session.id}`);
+
+        const { error } = await duplicateCalculationSession({
+            userId: user.id,
+            title,
+            sourceData: session.source_data || [],
+            calculatorState: session.calculator_state || {},
+        });
+
+        if (error) {
+            console.error(error);
+            message.error(getCalculationSessionErrorMessage(error, '계산 복제에 실패했습니다.'));
+        } else {
+            await fetchSessions();
+            message.success('저장된 계산을 복제했습니다.');
+        }
+        setSessionActionKey(null);
     };
 
     if (loading) {
@@ -242,6 +298,24 @@ export default function MyPage() {
                                                     <Link key="load" href={`/?session=${session.id}`}>
                                                         불러오기
                                                     </Link>,
+                                                    <Button
+                                                        key="rename"
+                                                        type="link"
+                                                        className="!px-0"
+                                                        loading={sessionActionKey === `rename-${session.id}`}
+                                                        onClick={() => handleRename(session)}
+                                                    >
+                                                        제목 변경
+                                                    </Button>,
+                                                    <Button
+                                                        key="duplicate"
+                                                        type="link"
+                                                        className="!px-0"
+                                                        loading={sessionActionKey === `duplicate-${session.id}`}
+                                                        onClick={() => handleDuplicate(session)}
+                                                    >
+                                                        복제
+                                                    </Button>,
                                                     <Popconfirm
                                                         key="delete"
                                                         title="이 계산을 삭제할까요?"

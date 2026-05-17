@@ -47,6 +47,28 @@ export async function saveCalculationSession({ sessionId, userId, title, sourceD
         .single();
 }
 
+export async function renameCalculationSession(sessionId, title) {
+    return supabase
+        .from('calculation_sessions')
+        .update({ title })
+        .eq('id', sessionId)
+        .select('id')
+        .single();
+}
+
+export async function duplicateCalculationSession({ userId, title, sourceData, calculatorState }) {
+    return supabase
+        .from('calculation_sessions')
+        .insert({
+            user_id: userId,
+            title,
+            source_data: sourceData,
+            calculator_state: calculatorState,
+        })
+        .select('id')
+        .single();
+}
+
 export async function deleteCalculationSession(sessionId) {
     return supabase.from('calculation_sessions').delete().eq('id', sessionId);
 }
