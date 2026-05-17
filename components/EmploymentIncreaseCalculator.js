@@ -868,63 +868,58 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
           
           const { youthRate, otherRate } = rates;
           const maxAmount = originRes.credit1st;
+          const year2Res = resultData.find(r => r.year === originYear + 1);
+
+          const calculateSingleYearClawbackAmount = (targetStat) => {
+              if (!targetStat) return { amount: 0, reason: '' };
+
+              const diffOverall = targetStat.overallCount - originStat.overallCount;
+              const diffYouth = targetStat.youthCount - originStat.youthCount;
+              const diffNormal = targetStat.normalCount - originStat.normalCount;
+              let amount = 0;
+              let reason = '';
+
+              if (diffOverall < 0) {
+                  const totalDec = Math.abs(diffOverall);
+                  if (diffYouth > 0 && diffNormal < 0) {
+                      amount = Math.min(totalDec, Math.abs(diffNormal)) * otherRate;
+                  } else if (diffYouth < 0 && diffNormal > 0) {
+                      const cappedYouthDec = Math.min(Math.abs(diffYouth), originRes.youthIncreaseRecognized || Math.abs(diffYouth));
+                      const extraYouthDec = Math.max(0, cappedYouthDec - totalDec);
+                      amount = (totalDec * youthRate) + (extraYouthDec * (youthRate - otherRate));
+                  } else {
+                      const appliedYouthDec = Math.min(totalDec, Math.max(0, -diffYouth));
+                      const appliedNormalDec = totalDec - appliedYouthDec;
+                      amount = (appliedYouthDec * youthRate) + (appliedNormalDec * otherRate);
+                  }
+                  reason = '전체 인원 감소';
+              } else if (diffYouth < 0) {
+                  amount = Math.abs(diffYouth) * (youthRate - otherRate);
+                  reason = '청년 인원 감소';
+              }
+
+              if (amount > maxAmount) amount = maxAmount;
+              return { amount, reason };
+          };
           
           let clawbackY2 = 0;
           let y2Reason = '';
           const year2Stat = averages.find(a => a.year === originYear + 1);
           if (year2Stat) {
-              const diffOverall = year2Stat.overallCount - originStat.overallCount;
-              const diffYouth = year2Stat.youthCount - originStat.youthCount;
-              const diffNormal = year2Stat.normalCount - originStat.normalCount;
-              if (diffOverall < 0) {
-                  const totalDec = Math.abs(diffOverall);
-                  if (diffYouth > 0 && diffNormal < 0) {
-                      clawbackY2 = Math.min(totalDec, Math.abs(diffNormal)) * otherRate;
-                  } else if (diffYouth < 0 && diffNormal > 0) {
-                      const cappedYouthDec = Math.min(Math.abs(diffYouth), originRes.youthIncreaseRecognized || Math.abs(diffYouth));
-                      const extraYouthDec = Math.max(0, cappedYouthDec - totalDec);
-                      clawbackY2 = (totalDec * youthRate) + (extraYouthDec * (youthRate - otherRate));
-                  } else {
-                      const appliedYouthDec = Math.min(totalDec, Math.max(0, -diffYouth));
-                      const appliedNormalDec = totalDec - appliedYouthDec;
-                      clawbackY2 = (appliedYouthDec * youthRate) + (appliedNormalDec * otherRate);
-                  }
-                  y2Reason = '전체 인원 감소';
-              } else if (diffYouth < 0) {
-                  clawbackY2 = Math.abs(diffYouth) * (youthRate - otherRate);
-                  y2Reason = '청년 인원 감소';
-              }
-              if (clawbackY2 > maxAmount) clawbackY2 = maxAmount;
+              const year2Clawback = calculateSingleYearClawbackAmount(year2Stat);
+              clawbackY2 = year2Clawback.amount;
+              y2Reason = year2Clawback.reason;
           }
           
           let clawbackY3 = 0;
           let y3Reason = '';
           const year3Stat = averages.find(a => a.year === originYear + 2);
           if (year3Stat) {
-              const diffOverall = year3Stat.overallCount - originStat.overallCount;
-              const diffYouth = year3Stat.youthCount - originStat.youthCount;
-              const diffNormal = year3Stat.normalCount - originStat.normalCount;
-              let totalClawback = 0;
-              if (diffOverall < 0) {
-                  const totalDec = Math.abs(diffOverall);
-                  if (diffYouth > 0 && diffNormal < 0) {
-                      totalClawback = Math.min(totalDec, Math.abs(diffNormal)) * otherRate;
-                  } else if (diffYouth < 0 && diffNormal > 0) {
-                      const cappedYouthDec = Math.min(Math.abs(diffYouth), originRes.youthIncreaseRecognized || Math.abs(diffYouth));
-                      const extraYouthDec = Math.max(0, cappedYouthDec - totalDec);
-                      totalClawback = (totalDec * youthRate) + (extraYouthDec * (youthRate - otherRate));
-                  } else {
-                      const appliedYouthDec = Math.min(totalDec, Math.max(0, -diffYouth));
-                      const appliedNormalDec = totalDec - appliedYouthDec;
-                      totalClawback = (appliedYouthDec * youthRate) + (appliedNormalDec * otherRate);
-                  }
-                  y3Reason = '전체 인원 감소';
-              } else if (diffYouth < 0) {
-                  totalClawback = Math.abs(diffYouth) * (youthRate - otherRate);
-                  y3Reason = '청년 인원 감소';
-              }
-              if (totalClawback > maxAmount) totalClawback = maxAmount;
+              const year3Clawback = calculateSingleYearClawbackAmount(year3Stat);
+              const receivedCreditYears = 1 + ((year2Res?.credit2nd || 0) > 0 ? 1 : 0);
+              const totalClawback = year3Clawback.amount * receivedCreditYears;
               clawbackY3 = Math.max(0, totalClawback - clawbackY2);
+              y3Reason = year3Clawback.reason;
               if (clawbackY3 === 0) y3Reason = '';
           }
           
