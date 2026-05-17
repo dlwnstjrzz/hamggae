@@ -827,6 +827,25 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
     setShowClawback(false);
   };
 
+  const removeExcludedEmployee = (employeeId) => {
+    const newData = processedData.map(d => {
+        if (d.id !== employeeId) return d;
+
+        const newD = { ...d, exclusionReason: null, forceIncludeExec: true };
+        if (newD.baseFullStats) Object.assign(newD, newD.baseFullStats);
+        return newD;
+    });
+
+    setProcessedData(newData);
+    setManuallyExcludedIds(prev => {
+        const next = new Set(prev);
+        next.delete(employeeId);
+        return next;
+    });
+    setIsCalculated(false);
+    setShowClawback(false);
+  };
+
   const formatNumber = (value) => {
       return new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 0 }).format(value);
   };
@@ -1162,7 +1181,20 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
                               ) : (
                                   Object.values(grouped).map((person, idx) => (
                                       <tr key={idx} className="hover">
-                                      <td className="font-bold">{person.name}</td>
+                                      <td className="font-bold">
+                                          <div className="flex items-center justify-start gap-2 whitespace-nowrap min-w-[160px]">
+                                              <button
+                                                  type="button"
+                                                  className="btn btn-ghost btn-xs text-error"
+                                                  aria-label={`${person.name} 제외 해제`}
+                                                  title="전체 연도 제외 해제"
+                                                  onClick={() => removeExcludedEmployee(person.id)}
+                                              >
+                                                  x
+                                              </button>
+                                              <span>{person.name}</span>
+                                          </div>
+                                      </td>
                                       <td className="text-sm text-left opacity-60">
                                           <div className="font-mono">{person.id}</div>
                                       </td>
@@ -1179,7 +1211,7 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
                                               <td key={y} className={`text-sm ${isExcluded || hasExec ? 'font-bold' : ''}`}>
                                                   <div className="flex flex-col items-center gap-1">
                                                       <select
-                                                          className={`select select-xs select-bordered ${isExcluded || hasExec ? 'bg-base-200 text-error font-bold border-base-300' : 'bg-base-100 text-base-content font-bold border-base-200'}`}
+                                                          className={`select select-xs select-bordered min-w-[132px] ${isExcluded || hasExec ? 'bg-base-200 text-error font-bold border-base-300' : 'bg-base-100 text-base-content font-bold border-base-200'}`}
                                                           value={displayValue}
                                                           onChange={(e) => updateExclusion(currentDataOrDummy, e.target.value)}
                                                       >
