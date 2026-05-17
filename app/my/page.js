@@ -17,6 +17,7 @@ import {
 
 const { Header, Content, Footer } = Layout;
 const { Title, Text } = Typography;
+const CURRENT_SESSION_STORAGE_KEY = 'taxgo-current-session';
 
 export default function MyPage() {
     const { message } = App.useApp();
@@ -26,6 +27,7 @@ export default function MyPage() {
     const [sessions, setSessions] = useState([]);
     const [sessionsLoading, setSessionsLoading] = useState(false);
     const [sessionActionKey, setSessionActionKey] = useState(null);
+    const [currentSessionInfo, setCurrentSessionInfo] = useState(null);
 
     useEffect(() => {
         let mounted = true;
@@ -63,6 +65,22 @@ export default function MyPage() {
 
         fetchSessions();
     }, [user]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        const saved = window.localStorage.getItem(CURRENT_SESSION_STORAGE_KEY);
+        if (!saved) {
+            setCurrentSessionInfo(null);
+            return;
+        }
+
+        try {
+            setCurrentSessionInfo(JSON.parse(saved));
+        } catch {
+            setCurrentSessionInfo(null);
+        }
+    }, []);
 
     useEffect(() => {
         if (!loading && !user) {
@@ -126,6 +144,11 @@ export default function MyPage() {
             console.error(error);
             message.error(getCalculationSessionErrorMessage(error, '제목 변경에 실패했습니다.'));
         } else {
+            if (currentSessionInfo?.id === session.id && typeof window !== 'undefined') {
+                const nextInfo = { id: session.id, title };
+                window.localStorage.setItem(CURRENT_SESSION_STORAGE_KEY, JSON.stringify(nextInfo));
+                setCurrentSessionInfo(nextInfo);
+            }
             await fetchSessions();
             message.success('제목을 변경했습니다.');
         }
@@ -283,6 +306,22 @@ export default function MyPage() {
                                     </Link>
                                 </div>
 
+                                {currentSessionInfo?.title && (
+                                    <div className="mb-6 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 shadow-sm">
+                                        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                            현재 작업 중 세션
+                                        </div>
+                                        <div className="mt-1 flex items-center justify-between gap-3">
+                                            <div className="text-xl font-bold tracking-tight text-slate-900">
+                                                {currentSessionInfo.title}
+                                            </div>
+                                            <Link href={`/?session=${currentSessionInfo.id}`}>
+                                                <Button type="default">바로 불러오기</Button>
+                                            </Link>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {sessionsLoading ? (
                                     <div className="flex-1 flex items-center justify-center">
                                         <Spin />
@@ -293,7 +332,7 @@ export default function MyPage() {
                                         dataSource={sessions}
                                         renderItem={(session) => (
                                             <List.Item
-                                                className="!px-4 !py-5 rounded-lg hover:bg-slate-50 transition-colors"
+                                                className={`!px-4 !py-5 rounded-lg hover:bg-slate-50 transition-colors ${currentSessionInfo?.id === session.id ? '!bg-slate-50 ring-1 ring-slate-200' : ''}`}
                                                 actions={[
                                                     <Link key="load" href={`/?session=${session.id}`}>
                                                         불러오기
@@ -330,7 +369,16 @@ export default function MyPage() {
                                                 ]}
                                             >
                                                 <List.Item.Meta
-                                                    title={<span className="font-semibold text-slate-900">{session.title}</span>}
+                                                    title={
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-semibold text-slate-900">{session.title}</span>
+                                                            {currentSessionInfo?.id === session.id && (
+                                                                <span className="inline-flex items-center rounded-full bg-slate-900 px-2 py-0.5 text-[11px] font-semibold text-white">
+                                                                    현재 작업 중
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    }
                                                     description={`수정 ${new Date(session.updated_at).toLocaleString('ko-KR')}`}
                                                 />
                                             </List.Item>

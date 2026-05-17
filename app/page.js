@@ -27,6 +27,7 @@ const { Header, Content, Footer } = Layout;
 const { Title, Text } = Typography;
 
 const createDefaultSessionTitle = () => `경정청구 계산 ${new Date().toLocaleString('ko-KR')}`;
+const CURRENT_SESSION_STORAGE_KEY = 'taxgo-current-session';
 
 export default function Home() {
     const { message } = App.useApp();
@@ -43,10 +44,25 @@ export default function Home() {
     const [calculatorState, setCalculatorState] = useState(null);
     const [restoredSessionState, setRestoredSessionState] = useState(null);
     const [activeSessionId, setActiveSessionId] = useState(null);
+    const [activeSessionTitle, setActiveSessionTitle] = useState(null);
     const [calculatorRenderKey, setCalculatorRenderKey] = useState(0);
     const [isSaving, setIsSaving] = useState(false);
     const [loadingSessionId, setLoadingSessionId] = useState(null);
     const loadedSessionIdRef = useRef(null);
+
+    const persistCurrentSession = (sessionId, title) => {
+        if (typeof window === 'undefined') return;
+
+        if (!sessionId || !title) {
+            window.localStorage.removeItem(CURRENT_SESSION_STORAGE_KEY);
+            return;
+        }
+
+        window.localStorage.setItem(
+            CURRENT_SESSION_STORAGE_KEY,
+            JSON.stringify({ id: sessionId, title })
+        );
+    };
 
     useEffect(() => {
         let mounted = true;
@@ -98,6 +114,8 @@ export default function Home() {
             setCalculatorState(data.calculator_state || null);
             setRestoredSessionState(data.calculator_state || null);
             setActiveSessionId(data.id);
+            setActiveSessionTitle(data.title || null);
+            persistCurrentSession(data.id, data.title || null);
             setFiles([]);
             setCurrentStep(2);
             setActiveTab('excel');
@@ -125,6 +143,8 @@ export default function Home() {
             setCalculatorState(null);
             setRestoredSessionState(null);
             setActiveSessionId(null);
+            setActiveSessionTitle(null);
+            persistCurrentSession(null, null);
             loadedSessionIdRef.current = null;
             setCurrentStep(0);
         }, 0);
@@ -157,6 +177,8 @@ export default function Home() {
                 setCalculatorState(null);
                 setRestoredSessionState(null);
                 setActiveSessionId(null);
+                setActiveSessionTitle(null);
+                persistCurrentSession(null, null);
                 loadedSessionIdRef.current = null;
                 setCurrentStep(2);
                 setCalculatorRenderKey((prev) => prev + 1);
@@ -212,6 +234,8 @@ export default function Home() {
             setCalculatorState(null);
             setRestoredSessionState(null);
             setActiveSessionId(null);
+            setActiveSessionTitle(null);
+            persistCurrentSession(null, null);
             loadedSessionIdRef.current = null;
             setCurrentStep(1);
             setCalculatorRenderKey((prev) => prev + 1);
@@ -249,6 +273,8 @@ export default function Home() {
         setCalculatorState(null);
         setRestoredSessionState(null);
         setActiveSessionId(null);
+        setActiveSessionTitle(null);
+        persistCurrentSession(null, null);
         loadedSessionIdRef.current = null;
         setCurrentStep(0);
         setCalculatorRenderKey((prev) => prev + 1);
@@ -303,6 +329,8 @@ export default function Home() {
             message.error(getCalculationSessionErrorMessage(error, '계산 저장에 실패했습니다.'));
         } else {
             setActiveSessionId(data.id);
+            setActiveSessionTitle(title);
+            persistCurrentSession(data.id, title);
             message.success('계산 결과를 저장했습니다.');
         }
 
@@ -690,6 +718,16 @@ export default function Home() {
                 {processedData && processedData.length > 0 && (
                     <div className="w-full bg-white relative z-10 pb-32">
                         <div className="max-w-[1200px] mx-auto px-6 animate-in fade-in slide-in-from-bottom-8 duration-700">
+                            {activeSessionTitle && (
+                                <div className="mb-6 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 shadow-sm">
+                                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                                        현재 작업 중 세션
+                                    </div>
+                                    <div className="mt-1 text-2xl font-bold tracking-tight text-slate-900">
+                                        {activeSessionTitle}
+                                    </div>
+                                </div>
+                            )}
                             <EmploymentIncreaseCalculator
                                 key={`${activeSessionId || 'draft'}-${calculatorRenderKey}`}
                                 initialData={processedData}
