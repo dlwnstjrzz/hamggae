@@ -303,6 +303,11 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
              avgRateLast3Years = truncateRate(avg);
         }
 
+        const meetsBaseGrowthRequirement =
+            hasFullHistory &&
+            rateT !== null &&
+            rateT > avgRateLast3Years;
+
         // 4. Calculate Credit
         let excessAmount = 0;
         let creditAmount = 0;
@@ -327,16 +332,18 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
         // Check triggers using RateT_1 (Previous Year Growth)
         // Screenshot Step 7 Title references (28), which is RateT-1.
         // Logic: If previous year growth was negative or very low (dip), we smooth T and T-1.
-        if (wageT_2 > 0 && rateT_1 !== null) {
-             const conditionNegative = rateT_1 < 0;
-             const conditionLowGrowth = (rateT_1 >= 0 && avgRateLast3Years > 0 && rateT_1 < 0.3 * avgRateLast3Years);
-             
-             if (conditionNegative || conditionLowGrowth) {
-                 useSpecialProvision = true;
-             }
+        if (meetsBaseGrowthRequirement) {
+            if (wageT_2 > 0 && rateT_1 !== null) {
+                 const conditionNegative = rateT_1 < 0;
+                 const conditionLowGrowth = (rateT_1 >= 0 && avgRateLast3Years > 0 && rateT_1 < 0.3 * avgRateLast3Years);
+                 
+                 if (conditionNegative || conditionLowGrowth) {
+                     useSpecialProvision = true;
+                 }
+            }
         }
 
-        if (useSpecialProvision) {
+        if (meetsBaseGrowthRequirement && useSpecialProvision) {
             // Method B: Special Provision (계산 특례)
              if (hasFullHistory && wageT_2 > 0) {
                 // Step 33: Modified Avg Wage T = (WageT + WageT-1) / 2
@@ -365,9 +372,9 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
                 }
                 isSpecialApplicable = true; // Marked as applicable because it was triggered
              }
-        } else {
+        } else if (meetsBaseGrowthRequirement) {
              // Method A: General Calculation (일반적인 경우)
-             if (hasFullHistory && rateT !== null && rateT > avgRateLast3Years && avgRateLast3Years >= 0) {
+             if (hasFullHistory && rateT !== null && avgRateLast3Years >= 0) {
                  const wageIfGrew = wageT_1 * (1 + avgRateLast3Years);
                  const diff = wageT - wageIfGrew;
                  if (diff > 0) {
@@ -422,7 +429,7 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
         let isSMEConditionsMet = false;
         let smeReason = [];
 
-        if (isSmall) {
+        if (isSmall && meetsBaseGrowthRequirement) {
             isSMEConditionsMet = isCond1Met && isCond2Met && isCond3Met;
             
             if (!isSMEConditionsMet) {
@@ -551,7 +558,7 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
             val: `${(rateT * 100).toFixed(2)}%`,
             op: '>',
             target: `${(avgRateVal * 100).toFixed(2)}%`,
-            isMet: excessGeneral > 0 
+            isMet: meetsBaseGrowthRequirement
         });
 
         // 3. Special
@@ -589,7 +596,11 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
         // --- Failure Remarks Logic (Only for Remark Column) ---
         let failureNote = '';
         
-        if (excessAmount <= 0) {
+        if (!hasFullHistory) {
+            failureNote = '직전연도 자료가 없어 성립요건을 판단할 수 없습니다.';
+        } else if (!meetsBaseGrowthRequirement) {
+            failureNote = `성립요건 미충족: 해당 과세연도 평균임금 증가율(${rateTPct}%) ≤ 직전 3년 평균임금 증가율 평균(${(avgRateVal * 100).toFixed(2)}%)`;
+        } else if (excessAmount <= 0) {
              const notes = [];
              let curReason = '';
              let altReason = '';
@@ -646,7 +657,7 @@ export function calculateIncomeIncreaseCredit(processedData, settings) {
             generalConditions: generalConditions,
             specialConditions: specialConditions,
 
-            isCreditCalculable: hasFullHistory,
+            isCreditCalculable: hasFullHistory && meetsBaseGrowthRequirement,
             history: yearlyStats, 
             calcDetails: calcDetails, // Keep for backward compat
             calculationMethod: calculationMethod, 
