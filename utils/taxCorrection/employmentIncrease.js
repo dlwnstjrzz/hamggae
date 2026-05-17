@@ -145,8 +145,13 @@ function calculateIntegratedCredit(annualStats, settings) {
     let otherRate = 0;
 
     if (settings.size === 'small') {
-        youthRate = 1450;
-        otherRate = 850;
+        if (settings.region === 'capital') {
+            youthRate = 1450;
+            otherRate = 850;
+        } else {
+            youthRate = 1550;
+            otherRate = 950;
+        }
     } else if (settings.size === 'middle') {
         youthRate = 800;
         otherRate = 450;

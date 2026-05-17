@@ -212,9 +212,8 @@ export async function parseExcel(file) {
   const numericYears = Object.keys(withholdingByYear).map(Number).sort((a, b) => a - b);
 
   const getEmpKey = (emp) => {
-      const jumin = String(emp['주민등록번호'] || '');
-      const front = jumin.split('-')[0] || jumin.substring(0, 6);
-      return `${emp['성명']}_${front}`;
+      const jumin = String(emp['주민등록번호'] || '').replace(/[\s-]/g, '');
+      return jumin || null;
   };
 
   const getLastDay = (year, month) => {
@@ -233,7 +232,7 @@ export async function parseExcel(file) {
 
   const empKeysByYear = {};
   numericYears.forEach(y => {
-      empKeysByYear[y] = new Set((withholdingByYear[String(y)] || []).map(getEmpKey));
+      empKeysByYear[y] = new Set((withholdingByYear[String(y)] || []).map(getEmpKey).filter(Boolean));
   });
 
   numericYears.forEach(year => {
@@ -267,7 +266,7 @@ export async function parseExcel(file) {
           if (!inferredDate && lastNonZeroMonth === 12 && year !== maxYear) {
               const empKey = getEmpKey(emp);
               const nextYear = year + 1;
-              const appearsNextYear = empKeysByYear[nextYear]?.has(empKey);
+              const appearsNextYear = empKey ? empKeysByYear[nextYear]?.has(empKey) : false;
               if (!appearsNextYear) {
                   inferredDate = getLastDay(year, 12);
                   inferredReason = '다음연도 자료 없음';

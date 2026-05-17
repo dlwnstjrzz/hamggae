@@ -875,10 +875,20 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
           if (year2Stat) {
               const diffOverall = year2Stat.overallCount - originStat.overallCount;
               const diffYouth = year2Stat.youthCount - originStat.youthCount;
+              const diffNormal = year2Stat.normalCount - originStat.normalCount;
               if (diffOverall < 0) {
-                  const appliedYouthDec = Math.min(Math.abs(diffOverall), Math.max(0, -diffYouth));
-                  const appliedNormalDec = Math.abs(diffOverall) - appliedYouthDec;
-                  clawbackY2 = (appliedYouthDec * youthRate) + (appliedNormalDec * otherRate);
+                  const totalDec = Math.abs(diffOverall);
+                  if (diffYouth > 0 && diffNormal < 0) {
+                      clawbackY2 = Math.min(totalDec, Math.abs(diffNormal)) * otherRate;
+                  } else if (diffYouth < 0 && diffNormal > 0) {
+                      const cappedYouthDec = Math.min(Math.abs(diffYouth), originRes.youthIncreaseRecognized || Math.abs(diffYouth));
+                      const extraYouthDec = Math.max(0, cappedYouthDec - totalDec);
+                      clawbackY2 = (totalDec * youthRate) + (extraYouthDec * (youthRate - otherRate));
+                  } else {
+                      const appliedYouthDec = Math.min(totalDec, Math.max(0, -diffYouth));
+                      const appliedNormalDec = totalDec - appliedYouthDec;
+                      clawbackY2 = (appliedYouthDec * youthRate) + (appliedNormalDec * otherRate);
+                  }
                   y2Reason = '전체 인원 감소';
               } else if (diffYouth < 0) {
                   clawbackY2 = Math.abs(diffYouth) * (youthRate - otherRate);
@@ -893,11 +903,21 @@ export default function EmploymentIncreaseCalculator({ initialData, initialSessi
           if (year3Stat) {
               const diffOverall = year3Stat.overallCount - originStat.overallCount;
               const diffYouth = year3Stat.youthCount - originStat.youthCount;
+              const diffNormal = year3Stat.normalCount - originStat.normalCount;
               let totalClawback = 0;
               if (diffOverall < 0) {
-                  const appliedYouthDec = Math.min(Math.abs(diffOverall), Math.max(0, -diffYouth));
-                  const appliedNormalDec = Math.abs(diffOverall) - appliedYouthDec;
-                  totalClawback = (appliedYouthDec * youthRate) + (appliedNormalDec * otherRate);
+                  const totalDec = Math.abs(diffOverall);
+                  if (diffYouth > 0 && diffNormal < 0) {
+                      totalClawback = Math.min(totalDec, Math.abs(diffNormal)) * otherRate;
+                  } else if (diffYouth < 0 && diffNormal > 0) {
+                      const cappedYouthDec = Math.min(Math.abs(diffYouth), originRes.youthIncreaseRecognized || Math.abs(diffYouth));
+                      const extraYouthDec = Math.max(0, cappedYouthDec - totalDec);
+                      totalClawback = (totalDec * youthRate) + (extraYouthDec * (youthRate - otherRate));
+                  } else {
+                      const appliedYouthDec = Math.min(totalDec, Math.max(0, -diffYouth));
+                      const appliedNormalDec = totalDec - appliedYouthDec;
+                      totalClawback = (appliedYouthDec * youthRate) + (appliedNormalDec * otherRate);
+                  }
                   y3Reason = '전체 인원 감소';
               } else if (diffYouth < 0) {
                   totalClawback = Math.abs(diffYouth) * (youthRate - otherRate);
