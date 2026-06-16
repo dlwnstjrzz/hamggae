@@ -168,7 +168,8 @@ function extractEmployeeData(words, year) {
   }
 
   // 주민등록번호 (추출만 하고 일괄 처리)
-  const juminMatch = fullText.match(/⑥\s*주민등록번호\s+(\d{6}-(?:\d{7}|\d\*{6}|\*{7}))/) || fullText.match(/주민등록번호\s+(\d{6}-(?:\d{7}|\d\*{6}|\*{7}))/);
+  const juminPattern = /주민등록번호\s*[A-Z]?\)?\s*(\d{6}-(?:\d{7}|\d\*{6}|\*{7}))/;
+  const juminMatch = fullText.match(/⑥\s*주민등록번호\s*[A-Z]?\)?\s*(\d{6}-(?:\d{7}|\d\*{6}|\*{7}))/) || fullText.match(juminPattern);
   if (juminMatch) {
     data.주민등록번호 = juminMatch[1].trim();
   }
